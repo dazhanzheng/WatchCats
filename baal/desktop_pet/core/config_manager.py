@@ -6,6 +6,8 @@
 
 import json
 import os
+import sys
+import platform
 from pathlib import Path
 from typing import Dict, Any, Optional
 from .logger_config import get_logger, log_performance
@@ -21,8 +23,8 @@ class ConfigManager:
         """初始化配置管理器"""
         self.logger = get_logger('baal.desktop_pet.core.config_manager')
         self.logger.info("Initializing ConfigManager")
-        # 配置文件路径 - 保存在用户目录下
-        self.config_dir = Path.home() / ".baal_pet"
+        # 配置文件路径 - Windows使用AppData，其他系统使用用户目录
+        self.config_dir = self._get_config_dir()
         self.config_file = self.config_dir / "config.json"
         
         self.logger.debug(f"Config directory: {self.config_dir}")
@@ -39,6 +41,40 @@ class ConfigManager:
         # 加载配置
         self.config = self._load_config()
         self.logger.info(f"Configuration loaded. API key configured: {self.is_configured()}")
+    
+    def _get_config_dir(self) -> Path:
+        """获取配置目录路径，Windows使用AppData目录"""
+        if sys.platform == "win32":
+            # Windows: 使用 AppData/Local 目录
+            appdata = os.environ.get('LOCALAPPDATA')
+            if not appdata:
+                # 如果LOCALAPPDATA不存在，尝试APPDATA
+                appdata = os.environ.get('APPDATA')
+            if not appdata:
+                # 如果都不存在，使用用户主目录
+                self.logger.warning("Cannot find AppData directory, using home directory")
+                return Path.home() / ".baal_pet"
+            
+            config_dir = Path(appdata) / "BaalPet"
+            self.logger.info(f"Using Windows AppData directory: {config_dir}")
+            
+            # 创建目录时设置完全权限
+            try:
+                config_dir.mkdir(parents=True, exist_ok=True)
+                # Windows上确保有写入权限
+                if platform.system() == "Windows":
+                    import stat
+                    config_dir.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+            except Exception as e:
+                self.logger.error(f"Failed to create config directory: {e}")
+                # 回退到用户目录
+                config_dir = Path.home() / ".baal_pet"
+                self.logger.warning(f"Falling back to home directory: {config_dir}")
+            
+            return config_dir
+        else:
+            # macOS/Linux: 使用用户主目录
+            return Path.home() / ".baal_pet"
     
     @log_performance
     def _load_config(self) -> Dict[str, Any]:
@@ -106,16 +142,64 @@ class ConfigManager:
         self.logger.info(f"Saving configuration to {self.config_file}")
         self.logger.debug(f"Configuration to save: {safe_config}")
         
+        # 确保目录存在
         try:
-            with open(self.config_file, 'w', encoding='utf-8') as f:
+            self.config_dir.mkdir(parents=True, exist_ok=True)
+            self.logger.debug(f"Ensured config directory exists: {self.config_dir}")
+        except Exception as e:
+            self.logger.error(f"Failed to create config directory: {e}")
+            if sys.platform == "win32":
+                self.logger.error("On Windows, try running the application as Administrator")
+            return False
+        
+        # 尝试写入临时文件测试权限
+        temp_file = self.config_file.with_suffix('.tmp')
+        try:
+            with open(temp_file, 'w', encoding='utf-8') as f:
                 json.dump(self.config, f, indent=2, ensure_ascii=False)
+            
+            # 如果临时文件写入成功，重命名为正式文件
+            if self.config_file.exists():
+                # 备份旧文件
+                backup_file = self.config_file.with_suffix('.bak')
+                try:
+                    if backup_file.exists():
+                        backup_file.unlink()
+                    self.config_file.rename(backup_file)
+                    self.logger.debug(f"Backed up old config to {backup_file}")
+                except Exception as e:
+                    self.logger.warning(f"Could not backup old config: {e}")
+            
+            # 重命名临时文件
+            temp_file.rename(self.config_file)
             self.logger.info("Configuration saved successfully")
             return True
+            
         except PermissionError as e:
             self.logger.error(f"Permission denied when saving config: {e}", exc_info=True)
+            self.logger.error(f"Config directory: {self.config_dir}")
+            self.logger.error(f"Config file: {self.config_file}")
+            if sys.platform == "win32":
+                self.logger.error("Windows permission issue detected!")
+                self.logger.error("Solutions:")
+                self.logger.error("1. Run the application as Administrator")
+                self.logger.error("2. Check if antivirus is blocking file writes")
+                self.logger.error("3. Ensure the directory is not read-only")
+            # 清理临时文件
+            try:
+                if temp_file.exists():
+                    temp_file.unlink()
+            except:
+                pass
             return False
         except Exception as e:
             self.logger.error(f"Failed to save config file: {e}", exc_info=True)
+            # 清理临时文件
+            try:
+                if temp_file.exists():
+                    temp_file.unlink()
+            except:
+                pass
             return False
     
     def get_api_key(self) -> Optional[str]:

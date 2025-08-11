@@ -422,17 +422,37 @@ class SettingsDialog(QDialog):
         # 保存人设设置
         config['persona_level'] = self.persona_combo.currentData()
         
-        self.config_manager.save_config()
-        
-        # 显示成功消息
-        QMessageBox.information(
-            self,
-            "成功",
-            "配置已保存！\n\n人设切换将在下次对话时生效。"
-        )
-        
-        # 关闭对话框
-        self.accept()
+        # 尝试保存配置
+        if self.config_manager.save_config():
+            # 显示成功消息
+            QMessageBox.information(
+                self,
+                "成功",
+                "配置已保存！\n\n人设切换将在下次对话时生效。"
+            )
+            # 关闭对话框
+            self.accept()
+        else:
+            # 保存失败，显示错误消息
+            import sys
+            error_msg = "配置保存失败！\n\n"
+            
+            if sys.platform == "win32":
+                error_msg += "Windows 权限问题解决方案：\n"
+                error_msg += "1. 右键程序，选择'以管理员身份运行'\n"
+                error_msg += "2. 检查杀毒软件是否阻止文件写入\n"
+                error_msg += "3. 确保程序所在目录有写入权限\n\n"
+                error_msg += f"配置路径：{self.config_manager.config_file}\n\n"
+                error_msg += "注意：如果是从压缩包直接运行，\n请先解压到硬盘再运行程序。"
+            else:
+                error_msg += f"无法写入配置文件：\n{self.config_manager.config_file}\n\n"
+                error_msg += "请检查文件权限。"
+            
+            QMessageBox.critical(
+                self,
+                "保存失败",
+                error_msg
+            )
     
     def _toggle_key_visibility(self):
         """切换密钥可见性"""
