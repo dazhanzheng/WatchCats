@@ -104,32 +104,32 @@ jobs:
         }
         
         # Create README
-        $readme = @"
-Baal Pet Assistant (Baal宠物助手) - Windows Version
-=====================================================
-
-How to Run:
------------
-1. Extract all files to a folder
-2. Run 'Baal宠物助手.exe' or 'BaalPetAssistant.exe'
-3. Configure API keys on first run
-
-Requirements:
--------------
-- Windows 10 or later
-- Internet connection for AI features
-
-First Run:
-----------
-1. The app will appear as a floating cat icon
-2. Right-click to access settings
-3. Configure your OpenAI or Volcengine API key
-
-Support:
---------
-GitHub: https://github.com/dazhanzheng/WatchCats
-"@
-        $readme | Out-File -FilePath "$packageDir\README.txt" -Encoding UTF8
+        $readmeLines = @(
+          "Baal Pet Assistant (Baal宠物助手) - Windows Version",
+          "=====================================================",
+          "",
+          "How to Run:",
+          "-----------",
+          "1. Extract all files to a folder",
+          "2. Run 'Baal宠物助手.exe' or 'BaalPetAssistant.exe'",
+          "3. Configure API keys on first run",
+          "",
+          "Requirements:",
+          "-------------",
+          "- Windows 10 or later",
+          "- Internet connection for AI features",
+          "",
+          "First Run:",
+          "----------",
+          "1. The app will appear as a floating cat icon",
+          "2. Right-click to access settings",
+          "3. Configure your OpenAI or Volcengine API key",
+          "",
+          "Support:",
+          "--------",
+          "GitHub: https://github.com/dazhanzheng/WatchCats"
+        )
+        $readmeLines -join "`n" | Out-File -FilePath "$packageDir\README.txt" -Encoding UTF8
         
         # Create ZIP
         $zipPath = "dist\BaalPetAssistant-Windows.zip"
