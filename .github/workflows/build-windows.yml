@@ -104,7 +104,7 @@ jobs:
         }
         
         # Create README
-        @"
+        $readme = @"
 Baal Pet Assistant (Baal宠物助手) - Windows Version
 =====================================================
 
@@ -128,7 +128,8 @@ First Run:
 Support:
 --------
 GitHub: https://github.com/dazhanzheng/WatchCats
-"@ | Out-File -FilePath "$packageDir\README.txt" -Encoding UTF8
+"@
+        $readme | Out-File -FilePath "$packageDir\README.txt" -Encoding UTF8
         
         # Create ZIP
         $zipPath = "dist\BaalPetAssistant-Windows.zip"

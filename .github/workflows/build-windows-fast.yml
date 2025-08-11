@@ -84,14 +84,15 @@ jobs:
         }
         
         # Create batch file for easy start
-        @"
+        $batchContent = @"
 @echo off
 echo Starting Baal Pet Assistant...
 start "" "%~dp0Baal宠物助手.exe"
-"@ | Out-File -FilePath "$packageDir\Start.bat" -Encoding ASCII
+"@
+        $batchContent | Out-File -FilePath "$packageDir\Start.bat" -Encoding ASCII
         
         # Create README
-        @"
+        $readme = @"
 Baal Pet Assistant - Quick Start Guide
 =======================================
 
@@ -100,7 +101,8 @@ Baal Pet Assistant - Quick Start Guide
 3. Enjoy your AI desktop companion!
 
 For help: https://github.com/dazhanzheng/WatchCats
-"@ | Out-File -FilePath "$packageDir\README.txt" -Encoding UTF8
+"@
+        $readme | Out-File -FilePath "$packageDir\README.txt" -Encoding UTF8
         
         # Create ZIP
         $zipPath = "dist\BaalPetAssistant-Windows.zip"
