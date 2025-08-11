@@ -48,21 +48,24 @@ VersionInfoCopyright=Copyright (C) 2025 {#MyAppPublisher}
 MinVersion=10.0.17763
 
 [Languages]
-Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
+; Chinese language only if file exists
+; Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 
 [CustomMessages]
-chinesesimplified.LaunchProgram=运行 {#MyAppName}
-chinesesimplified.CreateDesktopIcon=创建桌面快捷方式(&D)
-chinesesimplified.CreateQuickLaunchIcon=创建快速启动栏图标(&Q)
-english.LaunchProgram=Launch {#MyAppName}
-english.CreateDesktopIcon=Create a &desktop shortcut
-english.CreateQuickLaunchIcon=Create a &Quick Launch shortcut
+; English messages (default)
+LaunchProgram=Launch {#MyAppName}
+CreateDesktopIcon=Create a &desktop shortcut
+CreateQuickLaunchIcon=Create a &Quick Launch shortcut
+; Chinese messages (if language pack available)
+; chinesesimplified.LaunchProgram=运行 {#MyAppName}
+; chinesesimplified.CreateDesktopIcon=创建桌面快捷方式(&D)
+; chinesesimplified.CreateQuickLaunchIcon=创建快速启动栏图标(&Q)
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked; OnlyBelowVersion: 6.1; Check: not IsWindows64
-Name: "startupicon"; Description: "开机自动启动"; GroupDescription: "其他选项:"; Flags: unchecked
+Name: "startupicon"; Description: "Start automatically at Windows startup"; GroupDescription: "Additional options:"; Flags: unchecked
 
 [Files]
 ; 主程序
@@ -86,19 +89,19 @@ Name: "{userappdata}\{#MyAppNameEN}\logs"
 Name: "{userappdata}\{#MyAppNameEN}\data"
 
 [Icons]
-; 开始菜单
+; Start menu shortcuts
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
-Name: "{group}\用户手册"; Filename: "{app}\README.txt"
-Name: "{group}\配置文件夹"; Filename: "{userappdata}\{#MyAppNameEN}"
+Name: "{group}\User Manual"; Filename: "{app}\README.txt"
+Name: "{group}\Configuration Folder"; Filename: "{userappdata}\{#MyAppNameEN}"
 
-; 桌面图标
+; Desktop shortcut
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
-; 快速启动栏
+; Quick Launch shortcut
 Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: quicklaunchicon
 
-; 开机启动
+; Startup shortcut
 Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: startupicon; Parameters: "--minimized"
 
 [Registry]
@@ -129,31 +132,31 @@ var
 begin
   Result := True;
   
-  // 检查是否已安装
+  // Check if already installed
   if RegKeyExists(HKEY_CURRENT_USER, 'Software\{#MyAppPublisher}\{#MyAppNameEN}') then
   begin
-    if MsgBox('检测到已安装旧版本，是否继续安装？', mbConfirmation, MB_YESNO) = IDNO then
+    if MsgBox('Previous version detected. Continue with installation?', mbConfirmation, MB_YESNO) = IDNO then
     begin
       Result := False;
     end;
   end;
   
-  // 检查Visual C++ Redistributable（如果需要）
+  // Check Visual C++ Redistributable if needed
   if not RegKeyExists(HKEY_LOCAL_MACHINE, 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64') then
   begin
-    if MsgBox('未检测到 Visual C++ Redistributable 2015-2022。' + #13#10 + 
-              '程序可能无法正常运行。是否继续安装？', mbConfirmation, MB_YESNO) = IDNO then
+    if MsgBox('Visual C++ Redistributable 2015-2022 not detected.' + #13#10 + 
+              'The program may not run properly. Continue anyway?', mbConfirmation, MB_YESNO) = IDNO then
     begin
       Result := False;
     end;
   end;
 end;
 
-// 卸载前确认
+// Uninstall confirmation
 function InitializeUninstall(): Boolean;
 begin
-  Result := MsgBox('确定要卸载 {#MyAppName} 吗？' + #13#10 + 
-                   '注意：用户数据和设置将被保留。', 
+  Result := MsgBox('Are you sure you want to uninstall {#MyAppName}?' + #13#10 + 
+                   'Note: User data and settings will be preserved.', 
                    mbConfirmation, MB_YESNO) = IDYES;
 end;
 
