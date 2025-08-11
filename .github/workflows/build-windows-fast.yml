@@ -57,93 +57,65 @@ jobs:
         .\venv\Scripts\activate
         pyinstaller --clean --noconfirm baal_windows.spec
 
-    # Check if Inno Setup is already installed (GitHub Actions often pre-installs it)
-    - name: Setup Inno Setup
+    - name: Create ZIP Package
       run: |
-        # Check for existing Inno Setup installation
-        $innoPath = $null
-        $possiblePaths = @(
-          "C:\Program Files (x86)\Inno Setup 6",
-          "C:\Program Files\Inno Setup 6",
-          "C:\tools\innosetup"
-        )
+        Write-Host "Creating comprehensive ZIP package..."
         
-        foreach ($path in $possiblePaths) {
-          if (Test-Path "$path\ISCC.exe") {
-            $innoPath = $path
-            Write-Host "✓ Found existing Inno Setup at: $path"
-            break
-          }
-        }
-        
-        # If not found, install via Chocolatey
-        if ($null -eq $innoPath) {
-          Write-Host "Installing Inno Setup via Chocolatey..."
-          choco install innosetup -y --no-progress
-          $innoPath = "C:\Program Files (x86)\Inno Setup 6"
-        } else {
-          Write-Host "Using pre-installed Inno Setup"
-        }
-        
-        # Add to PATH
-        if (Test-Path $innoPath) {
-          echo "$innoPath" >> $env:GITHUB_PATH
-          Write-Host "✓ Inno Setup ready at: $innoPath"
-          
-          # Display version
-          & "$innoPath\ISCC.exe" /? 2>&1 | Select-String "Inno Setup" | Select-Object -First 1
-        } else {
-          Write-Host "✗ Inno Setup not found!"
+        # Find the exe
+        $exePath = Get-ChildItem -Path "dist" -Filter "*.exe" | Select-Object -First 1
+        if (-not $exePath) {
+          Write-Host "❌ No exe file found!"
           exit 1
         }
-
-    # Alternative Option 2: Simple portable version
-    # - name: Use Portable Inno Setup
-    #   run: |
-    #     # Download portable version (smaller, faster)
-    #     $url = "https://github.com/jrsoftware/issrc/releases/download/is-6.2.2/innosetup-6.2.2.exe"
-    #     Invoke-WebRequest -Uri $url -OutFile inno.exe -UseBasicParsing
-    #     
-    #     # Extract without installing (portable mode)
-    #     Start-Process -FilePath inno.exe -ArgumentList "/PORTABLE=1 /SILENT" -Wait
-
-    - name: Build installer
-      run: |
-        # Find ISCC.exe
-        $iscc = Get-Command ISCC.exe -ErrorAction SilentlyContinue
-        if ($null -eq $iscc) {
-          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+        
+        # Create package directory
+        $packageDir = "dist\BaalPetAssistant"
+        New-Item -ItemType Directory -Force -Path $packageDir | Out-Null
+        
+        # Copy main executable
+        Copy-Item $exePath.FullName -Destination "$packageDir\$($exePath.Name)"
+        
+        # Copy resources
+        if (Test-Path "baal\resources") {
+          Copy-Item -Path "baal\resources" -Destination "$packageDir\resources" -Recurse -Force
+        }
+        if (Test-Path "动作表情拆分") {
+          Copy-Item -Path "动作表情拆分" -Destination "$packageDir\动作表情拆分" -Recurse -Force
         }
         
-        # Build installer
-        & $iscc /Q installer\baal_installer.iss
+        # Create batch file for easy start
+        @"
+@echo off
+echo Starting Baal Pet Assistant...
+start "" "%~dp0Baal宠物助手.exe"
+"@ | Out-File -FilePath "$packageDir\Start.bat" -Encoding ASCII
         
-        # Verify output
-        if (Test-Path "installer\Output\${{ env.APP_NAME_EN }}Setup.exe") {
-          Write-Host "✓ Installer created successfully"
-        } else {
-          Write-Host "✗ Installer creation failed"
-          exit 1
+        # Create README
+        @"
+Baal Pet Assistant - Quick Start Guide
+=======================================
+
+1. Double-click 'Start.bat' or 'Baal宠物助手.exe' to run
+2. Configure API keys on first run (right-click the cat icon)
+3. Enjoy your AI desktop companion!
+
+For help: https://github.com/dazhanzheng/WatchCats
+"@ | Out-File -FilePath "$packageDir\README.txt" -Encoding UTF8
+        
+        # Create ZIP
+        $zipPath = "dist\BaalPetAssistant-Windows.zip"
+        Compress-Archive -Path $packageDir -DestinationPath $zipPath -Force
+        
+        if (Test-Path $zipPath) {
+          $zipInfo = Get-Item $zipPath
+          Write-Host "✅ ZIP package created: $($zipInfo.Name)"
+          Write-Host "   Size: $([math]::Round($zipInfo.Length / 1MB, 2)) MB"
         }
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: windows-installer-fast
+        name: windows-package-fast
         path: |
-          dist\${{ env.APP_NAME }}.exe
-          installer\Output\${{ env.APP_NAME_EN }}Setup.exe
-        retention-days: 30
-
-    # Optional: Create a simple ZIP as alternative to installer
-    - name: Create portable ZIP
-      run: |
-        Compress-Archive -Path "dist\${{ env.APP_NAME }}.exe" -DestinationPath "dist\${{ env.APP_NAME_EN }}-portable.zip"
-        Write-Host "✓ Portable ZIP created"
-
-    - name: Upload portable ZIP
-      uses: actions/upload-artifact@v4
-      with:
-        name: windows-portable-zip
-        path: dist\*.zip
+          dist\BaalPetAssistant-Windows.zip
         retention-days: 30
