@@ -79,17 +79,45 @@ jobs:
         
     - name: Install Inno Setup
       run: |
-        # 下载并安装 Inno Setup
-        $url = "https://files.jrsoftware.org/is/6/innosetup-6.3.3.exe"
+        # 下载并安装 Inno Setup (使用最新稳定版)
+        $url = "https://jrsoftware.org/download.php/is.exe"
         $output = "innosetup.exe"
-        Invoke-WebRequest -Uri $url -OutFile $output
+        
+        # 备用下载链接
+        try {
+          Invoke-WebRequest -Uri $url -OutFile $output -UseBasicParsing
+        } catch {
+          Write-Host "Primary download failed, trying alternative URL..."
+          $url = "https://github.com/jrsoftware/issrc/releases/download/is-6.2.2/innosetup-6.2.2.exe"
+          Invoke-WebRequest -Uri $url -OutFile $output -UseBasicParsing
+        }
+        
         Start-Process -FilePath $output -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-" -Wait
-        echo "C:\Program Files (x86)\Inno Setup 6" >> $env:GITHUB_PATH
+        
+        # 添加到PATH (检查多个可能的安装位置)
+        if (Test-Path "C:\Program Files (x86)\Inno Setup 6") {
+          echo "C:\Program Files (x86)\Inno Setup 6" >> $env:GITHUB_PATH
+        } elseif (Test-Path "C:\Program Files\Inno Setup 6") {
+          echo "C:\Program Files\Inno Setup 6" >> $env:GITHUB_PATH
+        } else {
+          Write-Host "Warning: Inno Setup installation path not found"
+        }
 
     - name: Build installer with Inno Setup
       run: |
-        # 编译Inno Setup脚本
-        & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /Q installer\baal_installer.iss
+        # 查找并编译Inno Setup脚本
+        $isccPath = ""
+        if (Test-Path "C:\Program Files (x86)\Inno Setup 6\ISCC.exe") {
+          $isccPath = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+        } elseif (Test-Path "C:\Program Files\Inno Setup 6\ISCC.exe") {
+          $isccPath = "C:\Program Files\Inno Setup 6\ISCC.exe"
+        } else {
+          Write-Host "Error: ISCC.exe not found!"
+          exit 1
+        }
+        
+        Write-Host "Using ISCC at: $isccPath"
+        & "$isccPath" /Q installer\baal_installer.iss
         
         # 检查输出
         if (Test-Path "installer\Output\${{ env.APP_NAME_EN }}Setup.exe") {

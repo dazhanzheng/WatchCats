@@ -122,9 +122,20 @@ jobs:
 
     - name: Install Inno Setup
       run: |
-        $url = "https://files.jrsoftware.org/is/6/innosetup-6.3.3.exe"
-        Invoke-WebRequest -Uri $url -OutFile innosetup.exe
-        Start-Process -FilePath innosetup.exe -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-" -Wait
+        # Download and install Inno Setup
+        $url = "https://jrsoftware.org/download.php/is.exe"
+        $output = "innosetup.exe"
+        
+        # Try primary URL, fallback to GitHub releases if needed
+        try {
+          Invoke-WebRequest -Uri $url -OutFile $output -UseBasicParsing
+        } catch {
+          Write-Host "Primary download failed, trying GitHub release..."
+          $url = "https://github.com/jrsoftware/issrc/releases/download/is-6.2.2/innosetup-6.2.2.exe"
+          Invoke-WebRequest -Uri $url -OutFile $output -UseBasicParsing
+        }
+        
+        Start-Process -FilePath $output -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-" -Wait
 
     - name: Update version in Inno Setup script
       run: |
@@ -135,7 +146,19 @@ jobs:
 
     - name: Build Inno Setup installer
       run: |
-        & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /Q installer\baal_installer.iss
+        # Find and run ISCC
+        $isccPath = ""
+        if (Test-Path "C:\Program Files (x86)\Inno Setup 6\ISCC.exe") {
+          $isccPath = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+        } elseif (Test-Path "C:\Program Files\Inno Setup 6\ISCC.exe") {
+          $isccPath = "C:\Program Files\Inno Setup 6\ISCC.exe"
+        } else {
+          Write-Host "Error: ISCC.exe not found!"
+          exit 1
+        }
+        
+        Write-Host "Using ISCC at: $isccPath"
+        & "$isccPath" /Q installer\baal_installer.iss
 
     - name: Install NSIS
       run: |

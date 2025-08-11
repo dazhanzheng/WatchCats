@@ -23,8 +23,10 @@
 
 ; 欢迎页面
 !insertmacro MUI_PAGE_WELCOME
-; 许可协议页面
-!insertmacro MUI_PAGE_LICENSE "..\LICENSE"
+; 许可协议页面 (如果LICENSE文件存在)
+!if /FileExists "..\LICENSE"
+  !insertmacro MUI_PAGE_LICENSE "..\LICENSE"
+!endif
 ; 安装目录选择页面
 !insertmacro MUI_PAGE_DIRECTORY
 ; 安装组件选择页面
