@@ -56,12 +56,23 @@ if __name__ == "__main__":
     startup_time = time.time()
     print("Baal Desktop Pet v1.0 - Starting...")
     
+    # 检查单实例
+    from baal.desktop_pet.core.single_instance import check_single_instance
+    instance_lock = check_single_instance("BaalPetAssistant")
+    
+    if instance_lock is None:
+        # 已有实例在运行，退出
+        if logger:
+            logger.info("Another instance is already running, exiting.")
+        sys.exit(0)
+    
     if logger:
         logger.info("=" * 50)
         logger.info("Baal Desktop Pet v1.0 - Application Starting")
         logger.info(f"Python version: {sys.version}")
         logger.info(f"Working directory: {os.getcwd()}")
         logger.info(f"Script path: {__file__}")
+        logger.info("Single instance check: PASSED")
         logger.info("=" * 50)
     
     try:
@@ -80,6 +91,10 @@ if __name__ == "__main__":
         traceback.print_exc()
         sys.exit(1)
     finally:
+        # 释放单实例锁
+        if instance_lock:
+            instance_lock.release()
+        
         if logger:
             elapsed = time.time() - startup_time
             logger.info(f"Application session ended after {elapsed:.2f} seconds") 

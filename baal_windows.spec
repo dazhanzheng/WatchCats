@@ -55,6 +55,7 @@ hiddenimports += [
     'baal.scheduler.goals',
     'baal.scheduler.schedule_trigger',
     'baal.desktop_pet.supervision_mode',
+    'baal.desktop_pet.core.single_instance',
     'pytz',
     'dateutil',
     'dateutil.parser',
