@@ -45,15 +45,38 @@ class ConfigManager:
     def _get_config_dir(self) -> Path:
         """获取配置目录路径，Windows使用AppData目录"""
         if sys.platform == "win32":
-            # Windows: 使用 AppData/Local 目录
-            appdata = os.environ.get('LOCALAPPDATA')
+            # Windows: 优先使用 AppData 目录
+            # 注意：PyInstaller 打包后环境变量可能不同
+            
+            # 方法1: 使用环境变量
+            appdata = os.environ.get('APPDATA')  # 先尝试 APPDATA (Roaming)
             if not appdata:
-                # 如果LOCALAPPDATA不存在，尝试APPDATA
-                appdata = os.environ.get('APPDATA')
+                appdata = os.environ.get('LOCALAPPDATA')  # 再尝试 LOCALAPPDATA
+            
+            # 方法2: 如果环境变量不存在，使用 expanduser
+            if not appdata:
+                try:
+                    # Windows 上 expanduser 会正确解析到用户目录
+                    user_profile = os.path.expanduser('~')
+                    appdata_path = Path(user_profile) / 'AppData' / 'Roaming'
+                    if appdata_path.exists():
+                        appdata = str(appdata_path)
+                        self.logger.info(f"Using expanduser AppData: {appdata}")
+                    else:
+                        # 尝试 Local
+                        appdata_path = Path(user_profile) / 'AppData' / 'Local'
+                        if appdata_path.exists():
+                            appdata = str(appdata_path)
+                            self.logger.info(f"Using expanduser LocalAppData: {appdata}")
+                except Exception as e:
+                    self.logger.error(f"Failed to find AppData via expanduser: {e}")
+            
             if not appdata:
                 # 如果都不存在，使用用户主目录
                 self.logger.warning("Cannot find AppData directory, using home directory")
-                return Path.home() / ".baal_pet"
+                config_dir = Path.home() / "BaalPet"
+                self.logger.info(f"Using home directory: {config_dir}")
+                return config_dir
             
             config_dir = Path(appdata) / "BaalPet"
             self.logger.info(f"Using Windows AppData directory: {config_dir}")
@@ -61,15 +84,16 @@ class ConfigManager:
             # 创建目录时设置完全权限
             try:
                 config_dir.mkdir(parents=True, exist_ok=True)
-                # Windows上确保有写入权限
-                if platform.system() == "Windows":
-                    import stat
-                    config_dir.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+                self.logger.info(f"Config directory created/verified: {config_dir}")
             except Exception as e:
                 self.logger.error(f"Failed to create config directory: {e}")
                 # 回退到用户目录
                 config_dir = Path.home() / ".baal_pet"
                 self.logger.warning(f"Falling back to home directory: {config_dir}")
+                try:
+                    config_dir.mkdir(parents=True, exist_ok=True)
+                except Exception as e2:
+                    self.logger.error(f"Failed to create fallback directory: {e2}")
             
             return config_dir
         else:
@@ -170,8 +194,33 @@ class ConfigManager:
                 except Exception as e:
                     self.logger.warning(f"Could not backup old config: {e}")
             
-            # 重命名临时文件
-            temp_file.rename(self.config_file)
+            # 重命名临时文件 (Windows 上需要特殊处理)
+            try:
+                if sys.platform == "win32" and self.config_file.exists():
+                    # Windows 不允许直接覆盖，需要先删除
+                    self.config_file.unlink()
+                temp_file.rename(self.config_file)
+            except Exception as e:
+                self.logger.error(f"Failed to rename temp file: {e}")
+                # 尝试使用 shutil.move 作为备选方案
+                try:
+                    import shutil
+                    shutil.move(str(temp_file), str(self.config_file))
+                    self.logger.info("Configuration saved using shutil.move")
+                except Exception as e2:
+                    self.logger.error(f"Failed to move file with shutil: {e2}")
+                    # 最后的尝试：直接复制内容
+                    try:
+                        with open(temp_file, 'r', encoding='utf-8') as src:
+                            content = src.read()
+                        with open(self.config_file, 'w', encoding='utf-8') as dst:
+                            dst.write(content)
+                        temp_file.unlink()
+                        self.logger.info("Configuration saved using file copy")
+                    except Exception as e3:
+                        self.logger.error(f"Failed to copy file content: {e3}")
+                        return False
+            
             self.logger.info("Configuration saved successfully")
             return True
             
@@ -221,6 +270,8 @@ class ConfigManager:
                 self.logger.info("First time API key configuration completed")
         else:
             self.logger.error("Failed to save API key")
+            # 即使保存失败，也保留在内存中，这样至少本次运行可以使用
+            self.logger.warning("API key kept in memory for this session")
     
     def get_base_url(self) -> str:
         """获取基础URL"""
