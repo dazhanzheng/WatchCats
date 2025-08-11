@@ -1,0 +1,122 @@
+name: Build Windows (Fast)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.9'
+  APP_NAME: 'Baal宠物助手'
+  APP_NAME_EN: 'BaalPetAssistant'
+
+jobs:
+  build-windows-fast:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+
+    - name: Cache virtual environment
+      uses: actions/cache@v3
+      with:
+        path: venv
+        key: ${{ runner.os }}-venv-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-venv-
+
+    - name: Setup environment
+      run: |
+        # Create or use cached venv
+        if (!(Test-Path venv)) {
+          python -m venv venv
+        }
+        .\venv\Scripts\activate
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller==6.11.1 pillow
+
+    - name: Convert icon
+      run: |
+        .\venv\Scripts\activate
+        python convert_icon.py
+
+    - name: Build with PyInstaller
+      run: |
+        .\venv\Scripts\activate
+        pyinstaller --clean --noconfirm baal_windows.spec
+
+    # Option 1: Using Chocolatey (Fastest)
+    - name: Install Inno Setup via Chocolatey
+      run: |
+        # Chocolatey is pre-installed on GitHub Actions Windows runners
+        choco install innosetup --version=6.2.2 -y --no-progress
+        
+        # Add to PATH
+        $innoPath = "C:\Program Files (x86)\Inno Setup 6"
+        if (Test-Path $innoPath) {
+          echo "$innoPath" >> $env:GITHUB_PATH
+          Write-Host "✓ Inno Setup installed via Chocolatey"
+        }
+
+    # Alternative Option 2: Simple portable version
+    # - name: Use Portable Inno Setup
+    #   run: |
+    #     # Download portable version (smaller, faster)
+    #     $url = "https://github.com/jrsoftware/issrc/releases/download/is-6.2.2/innosetup-6.2.2.exe"
+    #     Invoke-WebRequest -Uri $url -OutFile inno.exe -UseBasicParsing
+    #     
+    #     # Extract without installing (portable mode)
+    #     Start-Process -FilePath inno.exe -ArgumentList "/PORTABLE=1 /SILENT" -Wait
+
+    - name: Build installer
+      run: |
+        # Find ISCC.exe
+        $iscc = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+        if ($null -eq $iscc) {
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+        }
+        
+        # Build installer
+        & $iscc /Q installer\baal_installer.iss
+        
+        # Verify output
+        if (Test-Path "installer\Output\${{ env.APP_NAME_EN }}Setup.exe") {
+          Write-Host "✓ Installer created successfully"
+        } else {
+          Write-Host "✗ Installer creation failed"
+          exit 1
+        }
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-installer-fast
+        path: |
+          dist\${{ env.APP_NAME }}.exe
+          installer\Output\${{ env.APP_NAME_EN }}Setup.exe
+        retention-days: 30
+
+    # Optional: Create a simple ZIP as alternative to installer
+    - name: Create portable ZIP
+      run: |
+        Compress-Archive -Path "dist\${{ env.APP_NAME }}.exe" -DestinationPath "dist\${{ env.APP_NAME_EN }}-portable.zip"
+        Write-Host "✓ Portable ZIP created"
+
+    - name: Upload portable ZIP
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-portable-zip
+        path: dist\*.zip
+        retention-days: 30

@@ -77,30 +77,45 @@ jobs:
         echo "VERSION=$version" >> $env:GITHUB_OUTPUT
         echo "Version: $version"
         
+    - name: Cache Inno Setup
+      id: cache-inno
+      uses: actions/cache@v3
+      with:
+        path: C:\Program Files (x86)\Inno Setup 6
+        key: ${{ runner.os }}-inno-setup-6.2.2
+    
     - name: Install Inno Setup
+      if: steps.cache-inno.outputs.cache-hit != 'true'
       run: |
-        # 下载并安装 Inno Setup (使用最新稳定版)
-        $url = "https://jrsoftware.org/download.php/is.exe"
+        # Use GitHub releases for faster download
+        $url = "https://github.com/jrsoftware/issrc/releases/download/is-6.2.2/innosetup-6.2.2.exe"
         $output = "innosetup.exe"
         
-        # 备用下载链接
-        try {
-          Invoke-WebRequest -Uri $url -OutFile $output -UseBasicParsing
-        } catch {
-          Write-Host "Primary download failed, trying alternative URL..."
-          $url = "https://github.com/jrsoftware/issrc/releases/download/is-6.2.2/innosetup-6.2.2.exe"
-          Invoke-WebRequest -Uri $url -OutFile $output -UseBasicParsing
-        }
+        # Download with progress tracking
+        Write-Host "Downloading Inno Setup from GitHub..."
+        $start = Get-Date
+        Invoke-WebRequest -Uri $url -OutFile $output -UseBasicParsing
+        $duration = (Get-Date) - $start
+        Write-Host "Download completed in $($duration.TotalSeconds) seconds"
         
+        # Install silently
+        Write-Host "Installing Inno Setup..."
         Start-Process -FilePath $output -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-" -Wait
         
-        # 添加到PATH (检查多个可能的安装位置)
+        # Verify installation
+        if (Test-Path "C:\Program Files (x86)\Inno Setup 6\ISCC.exe") {
+          Write-Host "✓ Inno Setup installed successfully"
+        } else {
+          Write-Host "✗ Installation failed"
+          exit 1
+        }
+        
+    - name: Add Inno Setup to PATH
+      run: |
         if (Test-Path "C:\Program Files (x86)\Inno Setup 6") {
           echo "C:\Program Files (x86)\Inno Setup 6" >> $env:GITHUB_PATH
         } elseif (Test-Path "C:\Program Files\Inno Setup 6") {
           echo "C:\Program Files\Inno Setup 6" >> $env:GITHUB_PATH
-        } else {
-          Write-Host "Warning: Inno Setup installation path not found"
         }
 
     - name: Build installer with Inno Setup
