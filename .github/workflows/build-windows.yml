@@ -1,0 +1,136 @@
+name: Build Windows Installer
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:  # 允许手动触发
+
+env:
+  PYTHON_VERSION: '3.9'
+  APP_NAME: 'Baal宠物助手'
+  APP_NAME_EN: 'BaalPetAssistant'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+
+    - name: Create virtual environment
+      run: |
+        python -m venv venv
+        echo "Virtual environment created"
+
+    - name: Install dependencies
+      run: |
+        .\venv\Scripts\activate
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller==6.11.1
+        pip install pillow  # 用于图标转换
+
+    - name: Convert icon
+      run: |
+        .\venv\Scripts\activate
+        python convert_icon.py
+        
+    - name: Build with PyInstaller
+      run: |
+        .\venv\Scripts\activate
+        pyinstaller --clean --noconfirm baal_windows.spec
+        
+    - name: Test executable
+      run: |
+        # 简单测试exe是否能运行
+        if (Test-Path "dist\${{ env.APP_NAME }}.exe") {
+          Write-Host "✓ Executable found: dist\${{ env.APP_NAME }}.exe"
+          $fileInfo = Get-Item "dist\${{ env.APP_NAME }}.exe"
+          Write-Host "  Size: $([math]::Round($fileInfo.Length / 1MB, 2)) MB"
+        } else {
+          Write-Host "✗ Executable not found!"
+          exit 1
+        }
+
+    - name: Create version info
+      id: version
+      run: |
+        # 获取版本信息
+        if ($env:GITHUB_REF -match 'refs/tags/v(.*)') {
+          $version = $matches[1]
+        } else {
+          $version = "0.1.0-dev"
+        }
+        echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+        echo "Version: $version"
+        
+    - name: Install Inno Setup
+      run: |
+        # 下载并安装 Inno Setup
+        $url = "https://files.jrsoftware.org/is/6/innosetup-6.3.3.exe"
+        $output = "innosetup.exe"
+        Invoke-WebRequest -Uri $url -OutFile $output
+        Start-Process -FilePath $output -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-" -Wait
+        echo "C:\Program Files (x86)\Inno Setup 6" >> $env:GITHUB_PATH
+
+    - name: Build installer with Inno Setup
+      run: |
+        # 编译Inno Setup脚本
+        & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /Q installer\baal_installer.iss
+        
+        # 检查输出
+        if (Test-Path "installer\Output\${{ env.APP_NAME_EN }}Setup.exe") {
+          Write-Host "✓ Installer created successfully"
+          $fileInfo = Get-Item "installer\Output\${{ env.APP_NAME_EN }}Setup.exe"
+          Write-Host "  Size: $([math]::Round($fileInfo.Length / 1MB, 2)) MB"
+        }
+
+    - name: Upload executable artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.APP_NAME_EN }}-portable-windows
+        path: dist\${{ env.APP_NAME }}.exe
+        retention-days: 30
+
+    - name: Upload installer artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.APP_NAME_EN }}-installer-windows
+        path: installer\Output\${{ env.APP_NAME_EN }}Setup.exe
+        retention-days: 30
+
+    - name: Create Release (if tagged)
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          dist\${{ env.APP_NAME }}.exe
+          installer\Output\${{ env.APP_NAME_EN }}Setup.exe
+        body: |
+          ## 下载说明 / Download Instructions
+          
+          ### Windows用户：
+          - **安装版**: `${{ env.APP_NAME_EN }}Setup.exe` - 推荐，包含开始菜单和卸载程序
+          - **便携版**: `${{ env.APP_NAME }}.exe` - 无需安装，直接运行
+          
+          ### 系统要求：
+          - Windows 10 1903 或更高版本
+          - 需要网络连接（AI功能）
+          
+          ---
+          自动生成于 GitHub Actions
+        draft: false
+        prerelease: ${{ contains(steps.version.outputs.VERSION, 'dev') }}

@@ -1,0 +1,297 @@
+name: Release Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (e.g., 1.0.0)'
+        required: true
+        default: '0.1.0'
+      prerelease:
+        description: 'Is this a pre-release?'
+        required: true
+        type: boolean
+        default: false
+  
+  push:
+    tags:
+      - 'v*.*.*'
+
+env:
+  PYTHON_VERSION: '3.9'
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.get_version.outputs.VERSION }}
+    
+    steps:
+    - name: Get version
+      id: get_version
+      run: |
+        if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          VERSION="${{ github.event.inputs.version }}"
+        else
+          VERSION=${GITHUB_REF#refs/tags/v}
+        fi
+        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+        echo "Version: $VERSION"
+    
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ steps.get_version.outputs.VERSION }}
+        release_name: Release v${{ steps.get_version.outputs.VERSION }}
+        draft: true
+        prerelease: ${{ github.event.inputs.prerelease || contains(steps.get_version.outputs.VERSION, 'beta') || contains(steps.get_version.outputs.VERSION, 'alpha') }}
+        body: |
+          ## 🎉 Baal宠物助手 v${{ steps.get_version.outputs.VERSION }}
+          
+          ### ✨ 新功能
+          - 功能1
+          - 功能2
+          
+          ### 🐛 修复
+          - 修复1
+          - 修复2
+          
+          ### 📦 下载说明
+          
+          #### Windows用户：
+          - **安装版** (`BaalPetAssistantSetup.exe`): 推荐，包含开始菜单和卸载程序
+          - **便携版** (`Baal宠物助手.exe`): 无需安装，直接运行
+          - **NSIS安装版** (`BaalPetAssistant-nsis-setup.exe`): 备选安装程序
+          
+          #### macOS用户：
+          - **DMG安装包** (`BaalPetAssistant.dmg`): 拖拽安装
+          - **APP包** (`BaalPetAssistant.app.zip`): 解压后直接运行
+          
+          ### 💻 系统要求
+          - **Windows**: Windows 10 1903 或更高版本
+          - **macOS**: macOS 11.0 或更高版本
+          - 需要网络连接（AI功能）
+          
+          ### 📝 更新日志
+          查看完整更新日志: [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md)
+
+  build-windows:
+    name: Build Windows
+    needs: create-release
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m venv venv
+        .\venv\Scripts\activate
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller==6.11.1 pillow
+
+    - name: Convert icon
+      run: |
+        .\venv\Scripts\activate
+        python convert_icon.py
+
+    - name: Update version in spec
+      run: |
+        $version = "${{ needs.create-release.outputs.version }}"
+        $content = Get-Content baal_windows.spec -Raw
+        $content = $content -replace 'VERSION = ".*"', "VERSION = `"$version`""
+        Set-Content baal_windows.spec $content
+
+    - name: Build with PyInstaller
+      run: |
+        .\venv\Scripts\activate
+        pyinstaller --clean --noconfirm baal_windows.spec
+
+    - name: Install Inno Setup
+      run: |
+        $url = "https://files.jrsoftware.org/is/6/innosetup-6.3.3.exe"
+        Invoke-WebRequest -Uri $url -OutFile innosetup.exe
+        Start-Process -FilePath innosetup.exe -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-" -Wait
+
+    - name: Update version in Inno Setup script
+      run: |
+        $version = "${{ needs.create-release.outputs.version }}"
+        $content = Get-Content installer\baal_installer.iss -Raw
+        $content = $content -replace '#define MyAppVersion ".*"', "#define MyAppVersion `"$version`""
+        Set-Content installer\baal_installer.iss $content
+
+    - name: Build Inno Setup installer
+      run: |
+        & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /Q installer\baal_installer.iss
+
+    - name: Install NSIS
+      run: |
+        choco install nsis -y
+        echo "C:\Program Files (x86)\NSIS" >> $env:GITHUB_PATH
+
+    - name: Update version in NSIS script
+      run: |
+        $version = "${{ needs.create-release.outputs.version }}"
+        $content = Get-Content installer\baal_installer.nsi -Raw
+        $content = $content -replace '!define PRODUCT_VERSION ".*"', "!define PRODUCT_VERSION `"$version`""
+        Set-Content installer\baal_installer.nsi $content
+
+    - name: Build NSIS installer
+      run: |
+        & "C:\Program Files (x86)\NSIS\makensis.exe" installer\baal_installer.nsi
+
+    - name: Create checksums
+      run: |
+        $files = @(
+          "dist\Baal宠物助手.exe",
+          "installer\Output\BaalPetAssistantSetup.exe",
+          "installer\Output\BaalPetAssistantSetup.exe"
+        )
+        foreach ($file in $files) {
+          if (Test-Path $file) {
+            $hash = Get-FileHash $file -Algorithm SHA256
+            "$($hash.Hash)  $(Split-Path $file -Leaf)" | Out-File "$file.sha256"
+          }
+        }
+
+    - name: Upload portable exe
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.create-release.outputs.upload_url }}
+        asset_path: dist\Baal宠物助手.exe
+        asset_name: Baal宠物助手-v${{ needs.create-release.outputs.version }}.exe
+        asset_content_type: application/octet-stream
+
+    - name: Upload Inno Setup installer
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.create-release.outputs.upload_url }}
+        asset_path: installer\Output\BaalPetAssistantSetup.exe
+        asset_name: BaalPetAssistantSetup-v${{ needs.create-release.outputs.version }}.exe
+        asset_content_type: application/octet-stream
+
+    - name: Upload NSIS installer
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.create-release.outputs.upload_url }}
+        asset_path: installer\Output\BaalPetAssistantSetup.exe
+        asset_name: BaalPetAssistant-nsis-v${{ needs.create-release.outputs.version }}.exe
+        asset_content_type: application/octet-stream
+
+  build-macos:
+    name: Build macOS
+    needs: create-release
+    runs-on: macos-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m venv venv
+        source venv/bin/activate
+        pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller==6.11.1
+
+    - name: Update version
+      run: |
+        VERSION="${{ needs.create-release.outputs.version }}"
+        sed -i '' "s/CFBundleVersion.*$/CFBundleVersion\": \"$VERSION\",/" baal.spec
+        sed -i '' "s/CFBundleShortVersionString.*$/CFBundleShortVersionString\": \"$VERSION\",/" baal.spec
+
+    - name: Build with PyInstaller
+      run: |
+        source venv/bin/activate
+        pyinstaller --clean --noconfirm baal.spec
+
+    - name: Create DMG
+      run: |
+        pip install dmgbuild
+        dmgbuild -s scripts/dmgbuild-settings.py -D app="dist/Watch Cats.app" "Baal Pet Assistant" "dist/BaalPetAssistant-v${{ needs.create-release.outputs.version }}.dmg"
+
+    - name: Create ZIP
+      run: |
+        cd dist
+        zip -r "BaalPetAssistant-v${{ needs.create-release.outputs.version }}.app.zip" "Watch Cats.app"
+        cd ..
+
+    - name: Upload DMG
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.create-release.outputs.upload_url }}
+        asset_path: dist/BaalPetAssistant-v${{ needs.create-release.outputs.version }}.dmg
+        asset_name: BaalPetAssistant-v${{ needs.create-release.outputs.version }}.dmg
+        asset_content_type: application/octet-stream
+
+    - name: Upload APP ZIP
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.create-release.outputs.upload_url }}
+        asset_path: dist/BaalPetAssistant-v${{ needs.create-release.outputs.version }}.app.zip
+        asset_name: BaalPetAssistant-v${{ needs.create-release.outputs.version }}.app.zip
+        asset_content_type: application/zip
+
+  finalize-release:
+    name: Finalize Release
+    needs: [create-release, build-windows, build-macos]
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Publish release
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const { owner, repo } = context.repo;
+          const tag = 'v${{ needs.create-release.outputs.version }}';
+          
+          // 获取release
+          const releases = await github.rest.repos.listReleases({
+            owner,
+            repo
+          });
+          
+          const release = releases.data.find(r => r.tag_name === tag);
+          
+          if (release && release.draft) {
+            // 发布release
+            await github.rest.repos.updateRelease({
+              owner,
+              repo,
+              release_id: release.id,
+              draft: false
+            });
+            
+            console.log(`Release ${tag} published successfully!`);
+          }

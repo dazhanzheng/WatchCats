@@ -1,0 +1,27 @@
+# Baal 桌面宠物助手依赖
+
+# 核心UI框架
+PyQt6==6.5.3
+PyQt6-Qt6==6.5.3
+PyQt6-sip==13.6.0
+
+# LLM 相关
+langchain==0.3.26
+langchain-core==0.3.70
+langchain-openai
+httpx>=0.28.0
+volcengine-python-sdk>=4.0.0
+
+# ActivityWatch 客户端
+aw-client>=0.5.13
+aw-core>=0.5.16
+
+# 数据处理
+python-dateutil>=2.9.0
+pytz>=2023.3
+icalendar>=5.0.0
+
+# 其他必需
+requests>=2.32.0
+pydantic>=2.0.0
+PyYAML>=6.0.0
