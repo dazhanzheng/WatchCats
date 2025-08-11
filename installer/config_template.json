@@ -1,0 +1,23 @@
+{
+  "api_keys": {
+    "openai": "",
+    "volcengine": ""
+  },
+  "preferences": {
+    "language": "zh-CN",
+    "theme": "default",
+    "auto_start": false,
+    "show_in_taskbar": true
+  },
+  "window": {
+    "position": {
+      "x": 100,
+      "y": 100
+    },
+    "size": {
+      "width": 400,
+      "height": 300
+    }
+  },
+  "version": "0.1.0"
+}
