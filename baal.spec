@@ -120,13 +120,13 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='baal/resources/watch_cats.icns'
+    icon='baal/resources/baal_logo.icns' if os.path.exists('baal/resources/baal_logo.icns') else 'baal/resources/watch_cats.icns'
 )
 
 app = BUNDLE(
     exe,
     name='Watch Cats.app',
-    icon='baal/resources/watch_cats.icns',
+    icon='baal/resources/baal_logo.icns' if os.path.exists('baal/resources/baal_logo.icns') else 'baal/resources/watch_cats.icns',
     bundle_identifier='com.baal.pet',
     info_plist={
         'CFBundleName': 'Watch Cats',

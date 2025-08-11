@@ -120,13 +120,13 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='baal/resources/cat.icns' if os.path.exists('baal/resources/cat.icns') else 'baal/resources/watch_cats.icns'
+    icon='baal/resources/baal_logo.icns' if os.path.exists('baal/resources/baal_logo.icns') else 'baal/resources/cat.icns'
 )
 
 app = BUNDLE(
     exe,
     name='Baal Pet Assistant.app',
-    icon='baal/resources/cat.icns' if os.path.exists('baal/resources/cat.icns') else 'baal/resources/watch_cats.icns',
+    icon='baal/resources/baal_logo.icns' if os.path.exists('baal/resources/baal_logo.icns') else 'baal/resources/cat.icns',
     bundle_identifier='com.baal.pet',
     info_plist={
         'CFBundleName': 'Baal Pet Assistant',

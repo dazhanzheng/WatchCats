@@ -85,23 +85,35 @@ jobs:
       run: |
         source venv/bin/activate
         
-        # Check if icons already exist
-        if [ -f "baal/resources/cat.icns" ]; then
-          echo "✓ Icons already exist"
+        # Check if Baal logo icons exist
+        if [ -f "baal/resources/baal_logo.icns" ]; then
+          echo "✓ Baal logo icons already exist"
         else
-          echo "Creating icons..."
-          # Create icns from PNG
-          mkdir -p cat.iconset
-          sips -z 16 16     baal/resources/cat.png --out cat.iconset/icon_16x16.png
-          sips -z 32 32     baal/resources/cat.png --out cat.iconset/icon_32x32.png
-          sips -z 128 128   baal/resources/cat.png --out cat.iconset/icon_128x128.png
-          sips -z 256 256   baal/resources/cat.png --out cat.iconset/icon_256x256.png
-          sips -z 512 512   baal/resources/cat.png --out cat.iconset/icon_512x512.png
-          iconutil -c icns cat.iconset -o baal/resources/cat.icns
-          rm -rf cat.iconset
+          echo "Creating Baal logo icons..."
           
-          # Copy for compatibility
-          cp baal/resources/cat.icns baal/resources/watch_cats.icns
+          # Use the Baal logo from 动作表情拆分
+          if [ -f "动作表情拆分/巴利 logo.png" ]; then
+            # Copy to resources
+            cp "动作表情拆分/巴利 logo.png" "baal/resources/baal_logo.png"
+            
+            # Create icns from Baal logo
+            mkdir -p baal_logo.iconset
+            sips -z 16 16     "baal/resources/baal_logo.png" --out baal_logo.iconset/icon_16x16.png
+            sips -z 32 32     "baal/resources/baal_logo.png" --out baal_logo.iconset/icon_32x32.png
+            sips -z 128 128   "baal/resources/baal_logo.png" --out baal_logo.iconset/icon_128x128.png
+            sips -z 256 256   "baal/resources/baal_logo.png" --out baal_logo.iconset/icon_256x256.png
+            sips -z 512 512   "baal/resources/baal_logo.png" --out baal_logo.iconset/icon_512x512.png
+            iconutil -c icns baal_logo.iconset -o baal/resources/baal_logo.icns
+            rm -rf baal_logo.iconset
+            
+            # Copy for compatibility
+            cp baal/resources/baal_logo.icns baal/resources/cat.icns
+            cp baal/resources/baal_logo.icns baal/resources/watch_cats.icns
+            
+            echo "✓ Created Baal logo icons"
+          else
+            echo "⚠️ Baal logo not found, using default cat icon"
+          fi
         fi
         
     - name: Build Application
