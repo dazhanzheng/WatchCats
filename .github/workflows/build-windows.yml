@@ -77,45 +77,58 @@ jobs:
         echo "VERSION=$version" >> $env:GITHUB_OUTPUT
         echo "Version: $version"
         
-    - name: Cache Inno Setup
-      id: cache-inno
-      uses: actions/cache@v3
-      with:
-        path: C:\Program Files (x86)\Inno Setup 6
-        key: ${{ runner.os }}-inno-setup-6.2.2
-    
-    - name: Install Inno Setup
-      if: steps.cache-inno.outputs.cache-hit != 'true'
+    - name: Setup Inno Setup
       run: |
-        # Use GitHub releases for faster download
-        $url = "https://github.com/jrsoftware/issrc/releases/download/is-6.2.2/innosetup-6.2.2.exe"
-        $output = "innosetup.exe"
-        
-        # Download with progress tracking
-        Write-Host "Downloading Inno Setup from GitHub..."
-        $start = Get-Date
-        Invoke-WebRequest -Uri $url -OutFile $output -UseBasicParsing
-        $duration = (Get-Date) - $start
-        Write-Host "Download completed in $($duration.TotalSeconds) seconds"
-        
-        # Install silently
-        Write-Host "Installing Inno Setup..."
-        Start-Process -FilePath $output -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-" -Wait
-        
-        # Verify installation
-        if (Test-Path "C:\Program Files (x86)\Inno Setup 6\ISCC.exe") {
-          Write-Host "✓ Inno Setup installed successfully"
+        # First check if Inno Setup is already available
+        $iscc = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+        if ($iscc) {
+          Write-Host "✓ Inno Setup already available: $($iscc.Path)"
+          $iscc.Path -match "(.+)\\ISCC\.exe" | Out-Null
+          $innoPath = $matches[1]
         } else {
-          Write-Host "✗ Installation failed"
-          exit 1
+          # Check common installation paths
+          $possiblePaths = @(
+            "C:\Program Files (x86)\Inno Setup 6",
+            "C:\Program Files\Inno Setup 6",
+            "C:\tools\innosetup"
+          )
+          
+          $innoPath = $null
+          foreach ($path in $possiblePaths) {
+            if (Test-Path "$path\ISCC.exe") {
+              $innoPath = $path
+              Write-Host "✓ Found Inno Setup at: $path"
+              break
+            }
+          }
+          
+          # If still not found, install it
+          if ($null -eq $innoPath) {
+            Write-Host "Inno Setup not found, installing..."
+            
+            # Try Chocolatey first (fastest)
+            if (Get-Command choco -ErrorAction SilentlyContinue) {
+              Write-Host "Installing via Chocolatey..."
+              choco install innosetup -y --no-progress
+              $innoPath = "C:\Program Files (x86)\Inno Setup 6"
+            } else {
+              # Fallback to direct download
+              Write-Host "Downloading Inno Setup..."
+              $url = "https://github.com/jrsoftware/issrc/releases/download/is-6.2.2/innosetup-6.2.2.exe"
+              Invoke-WebRequest -Uri $url -OutFile "innosetup.exe" -UseBasicParsing
+              Start-Process -FilePath "innosetup.exe" -ArgumentList "/VERYSILENT /SP-" -Wait
+              $innoPath = "C:\Program Files (x86)\Inno Setup 6"
+            }
+          }
         }
         
-    - name: Add Inno Setup to PATH
-      run: |
-        if (Test-Path "C:\Program Files (x86)\Inno Setup 6") {
-          echo "C:\Program Files (x86)\Inno Setup 6" >> $env:GITHUB_PATH
-        } elseif (Test-Path "C:\Program Files\Inno Setup 6") {
-          echo "C:\Program Files\Inno Setup 6" >> $env:GITHUB_PATH
+        # Add to PATH if needed
+        if ($innoPath -and (Test-Path "$innoPath\ISCC.exe")) {
+          echo "$innoPath" >> $env:GITHUB_PATH
+          Write-Host "✓ Inno Setup ready"
+        } else {
+          Write-Host "✗ Failed to setup Inno Setup"
+          exit 1
         }
 
     - name: Build installer with Inno Setup

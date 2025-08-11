@@ -57,17 +57,44 @@ jobs:
         .\venv\Scripts\activate
         pyinstaller --clean --noconfirm baal_windows.spec
 
-    # Option 1: Using Chocolatey (Fastest)
-    - name: Install Inno Setup via Chocolatey
+    # Check if Inno Setup is already installed (GitHub Actions often pre-installs it)
+    - name: Setup Inno Setup
       run: |
-        # Chocolatey is pre-installed on GitHub Actions Windows runners
-        choco install innosetup --version=6.2.2 -y --no-progress
+        # Check for existing Inno Setup installation
+        $innoPath = $null
+        $possiblePaths = @(
+          "C:\Program Files (x86)\Inno Setup 6",
+          "C:\Program Files\Inno Setup 6",
+          "C:\tools\innosetup"
+        )
+        
+        foreach ($path in $possiblePaths) {
+          if (Test-Path "$path\ISCC.exe") {
+            $innoPath = $path
+            Write-Host "✓ Found existing Inno Setup at: $path"
+            break
+          }
+        }
+        
+        # If not found, install via Chocolatey
+        if ($null -eq $innoPath) {
+          Write-Host "Installing Inno Setup via Chocolatey..."
+          choco install innosetup -y --no-progress
+          $innoPath = "C:\Program Files (x86)\Inno Setup 6"
+        } else {
+          Write-Host "Using pre-installed Inno Setup"
+        }
         
         # Add to PATH
-        $innoPath = "C:\Program Files (x86)\Inno Setup 6"
         if (Test-Path $innoPath) {
           echo "$innoPath" >> $env:GITHUB_PATH
-          Write-Host "✓ Inno Setup installed via Chocolatey"
+          Write-Host "✓ Inno Setup ready at: $innoPath"
+          
+          # Display version
+          & "$innoPath\ISCC.exe" /? 2>&1 | Select-String "Inno Setup" | Select-Object -First 1
+        } else {
+          Write-Host "✗ Inno Setup not found!"
+          exit 1
         }
 
     # Alternative Option 2: Simple portable version
