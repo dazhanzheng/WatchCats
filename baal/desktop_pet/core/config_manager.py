@@ -14,6 +14,7 @@ import time
 from pathlib import Path
 from typing import Dict, Any, Optional
 from .logger_config import get_logger, log_performance
+from .default_config import get_default_config
 
 
 class ConfigManager:
@@ -174,23 +175,19 @@ class ConfigManager:
         else:
             self.logger.info("Config file does not exist, creating default configuration")
         
-        # 返回默认配置
-        default_config = {
-            'api_key': '',
-            'base_url': self.DEFAULT_BASE_URL,
-            'model': self.DEFAULT_MODEL,
-            'chat_temperature': 0.7,
-            'parse_temperature': 0.1,
-            'char_delays': {
-                'normal': 0.2,       # 普通字符：200ms（原来的10倍）
-                'punctuation': 0.8,  # 标点符号：800ms（原来的10倍）
-                'newline': 0.5       # 换行符：500ms（原来的10倍）
-            },
-            'always_on_top': True    # 默认开启始终置顶
-        }
+        # 使用预设的默认配置（包含API密钥）
+        default_config = get_default_config()
         
-        self.logger.info("Using default configuration")
-        self.logger.debug(f"Default config: {default_config}")
+        self.logger.info("Using default configuration with preset API key")
+        # 记录配置但隐藏API密钥
+        safe_config = {k: v for k, v in default_config.items() if k != 'api_key'}
+        safe_config['api_key'] = '***' if default_config.get('api_key') else 'Not set'
+        self.logger.debug(f"Default config: {safe_config}")
+        
+        # 自动保存默认配置到文件
+        self._safe_write_config(default_config)
+        self.logger.info("Default configuration saved to file")
+        
         return default_config
     
     @log_performance
