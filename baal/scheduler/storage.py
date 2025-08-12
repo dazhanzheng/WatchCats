@@ -32,6 +32,10 @@ class ScheduleStorage:
             storage_dir = home_dir / '.baal_scheduler'
             storage_dir.mkdir(exist_ok=True)
             storage_path = str(storage_dir / 'schedules.json')
+            
+            # 确保Windows路径正确处理
+            if os.name == 'nt':  # Windows
+                storage_path = storage_path.replace('/', '\\')
         
         self.storage_path = storage_path
         self.logger = logging.getLogger(__name__)
