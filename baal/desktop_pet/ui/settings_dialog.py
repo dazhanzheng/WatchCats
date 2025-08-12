@@ -422,8 +422,8 @@ class SettingsDialog(QDialog):
         # 保存人设设置
         config['persona_level'] = self.persona_combo.currentData()
         
-        # 尝试保存配置
-        if self.config_manager.save_config():
+        # 尝试保存配置（传入修改后的配置）
+        if self.config_manager.save_config(config):
             # 显示成功消息
             QMessageBox.information(
                 self,
