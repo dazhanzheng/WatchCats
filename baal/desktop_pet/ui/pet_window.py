@@ -300,6 +300,12 @@ class PetWindow(QWidget):
             self.chat_bubble = ChatBubble()
             self.chat_bubble.next_sentence_requested.connect(self._on_next_sentence_requested)
             self.chat_bubble.message_sent.connect(self._on_bubble_message_sent)
+            
+            # 应用当前的置顶设置到气泡窗口
+            config = self.config_manager.get_config()
+            always_on_top = config.get('always_on_top', True)
+            self._update_chat_bubble_flags(always_on_top)
+            
             self.logger.debug("Chat bubble initialized and connected")
         except Exception as e:
             self.logger.error(f"Failed to initialize chat bubble: {e}", exc_info=True)
@@ -960,6 +966,10 @@ class PetWindow(QWidget):
         # 立即应用置顶设置
         self._update_window_flags()
         
+        # 同步更新气泡窗口的置顶状态
+        if hasattr(self, 'chat_bubble') and self.chat_bubble:
+            self._update_chat_bubble_flags(checked)
+        
         # 同步更新两个菜单的勾选状态
         if hasattr(self, 'always_on_top_action'):
             self.always_on_top_action.setChecked(checked)
@@ -998,6 +1008,30 @@ class PetWindow(QWidget):
             # macOS 特殊处理：使用更高的窗口级别
             if always_on_top and sys.platform == 'darwin':
                 self._set_macos_window_level()
+    
+    def _update_chat_bubble_flags(self, always_on_top):
+        """更新气泡窗口的置顶状态"""
+        if not self.chat_bubble:
+            return
+        
+        # 保存气泡的当前状态
+        bubble_pos = self.chat_bubble.pos()
+        bubble_visible = self.chat_bubble.isVisible()
+        
+        # 设置新的窗口标志
+        flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool
+        if always_on_top:
+            flags |= Qt.WindowType.WindowStaysOnTopHint
+        
+        # 应用新标志到气泡窗口
+        self.chat_bubble.setWindowFlags(flags)
+        self.chat_bubble.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        
+        # 恢复气泡的位置和可见状态
+        self.chat_bubble.move(bubble_pos)
+        if bubble_visible:
+            self.chat_bubble.show()
+            self.chat_bubble.raise_()
     
     def _set_macos_window_level(self):
         """设置 macOS 窗口级别以实现真正的全局置顶"""
