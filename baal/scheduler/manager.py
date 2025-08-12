@@ -36,9 +36,18 @@ class ScheduleManager:
     def _load_from_storage(self):
         """从存储加载日程"""
         loaded_schedules = self.storage.load_schedules()
+        self.schedules.clear()  # 清空现有日程
         for schedule in loaded_schedules:
             self.schedules[schedule.id] = schedule
         self.logger.info(f"从存储加载了 {len(loaded_schedules)} 个日程")
+    
+    def reload(self):
+        """重新从存储加载日程（用于同步外部修改）"""
+        self.logger.info("重新加载日程数据...")
+        self._load_from_storage()
+        count = len(self.schedules)
+        self.logger.info(f"重新加载完成，当前有 {count} 个日程")
+        return count
     
     def _save_to_storage(self):
         """保存日程到存储"""

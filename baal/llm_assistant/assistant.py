@@ -349,6 +349,12 @@ class LLMAssistant:
                 if parsed_command.schedule_id:
                     print(f"  - schedule_id: {parsed_command.schedule_id}")
             
+            # 在查询类操作前重新加载日程数据，确保获取最新内容
+            if parsed_command.method in ["list", "get", "get_current", "get_upcoming", "get_schedules_for_date"]:
+                self.logger.debug("Reloading schedule data before query...")
+                count = self.schedule_manager.reload()
+                self.logger.debug(f"Reloaded {count} schedules")
+            
             # 执行命令
             if parsed_command.method == "add":
                 params = parsed_command.create_params
