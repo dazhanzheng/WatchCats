@@ -104,8 +104,9 @@ class ModernCalendarDialog(QDialog):
         self.view_stack.addWidget(self.week_view)
         self.view_stack.addWidget(self.month_view)
         
-        # 默认显示月视图
+        # 默认显示月视图并初始化
         self.view_stack.setCurrentWidget(self.month_view)
+        self.month_view.set_month(self.selected_date)  # 初始化月视图数据
         
         content_layout.addWidget(self.view_stack)
         layout.addWidget(content_widget)
@@ -829,6 +830,9 @@ class MonthView(QWidget):
         self.calendar_grid.date_clicked.connect(self.on_date_clicked)
         self.calendar_grid.schedule_clicked.connect(self.on_schedule_clicked)
         
+        # 初始化时设置当前月份，确保日程加载
+        self.calendar_grid.set_month(self.current_month)
+        
         layout.addWidget(self.calendar_grid)
     
     def set_month(self, date: QDate):
@@ -876,6 +880,9 @@ class MonthGridWidget(QWidget):
         self.month_schedules = {}
         self.cell_rects = {}  # 存储每个日期的矩形区域
         self.schedule_rects = {}  # 存储日程的矩形区域
+        
+        # 初始化时加载当月日程
+        self.load_schedules()
         
     def set_month(self, date: QDate):
         """设置月份"""
