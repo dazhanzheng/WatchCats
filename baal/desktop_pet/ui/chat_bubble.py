@@ -168,6 +168,11 @@ class ChatBubble(QWidget):
                 border: 1px solid #4CAF50;
                 background-color: rgba(255, 255, 255, 220);
             }
+            QLineEdit:disabled {
+                background-color: rgba(240, 240, 240, 150);
+                color: #999;
+                border: 1px solid #ccc;
+            }
         """)
         self.input_field.returnPressed.connect(self._on_send_message)
         
@@ -429,12 +434,21 @@ class ChatBubble(QWidget):
         self.is_streaming = True
         self.current_text = ""
         self.resize_timer.start()
+        
+        # 禁用输入框，并设置占位符提示
+        self.input_field.setEnabled(False)
+        self.input_field.setPlaceholderText("巴利正在回复中...")
     
     def end_stream(self):
         """结束流式输出"""
         self.logger.info("Ending stream output")
         self.is_streaming = False
         self.resize_timer.stop()
+        
+        # 重新启用输入框，恢复占位符
+        self.input_field.setEnabled(True)
+        self.input_field.setPlaceholderText("输入消息...")
+        self.input_field.setFocus()  # 自动聚焦到输入框
         
         # 将当前流式文本添加到对话历史
         if self.current_text:
@@ -516,6 +530,10 @@ class ChatBubble(QWidget):
     
     def _on_send_message(self):
         """处理发送消息"""
+        # 如果正在流式输出，忽略新消息
+        if self.is_streaming:
+            return
+            
         message = self.input_field.text().strip()
         if message:
             # 清空输入框

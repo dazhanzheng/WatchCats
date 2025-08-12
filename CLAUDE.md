@@ -15,6 +15,9 @@ Baal 桌面宠物助手（Baal Desktop Pet Assistant）是一个基于 AI 的桌
 - **日程管理**: 内置日历系统，支持任务调度和提醒
 - **系统托盘集成**: 始终置顶的浮动窗口，带系统托盘图标
 - **刘海屏适配**: macOS 上自动检测并避开刘海屏区域（顶部90像素安全区）
+- **人格系统**: 3种可切换的性格模式（严格主人、嘲讽管家、温柔伴侣）
+- **单实例保护**: 防止多个应用实例同时运行
+- **跨平台配置**: Windows/macOS 统一的配置管理系统
 
 ### 角色设定
 - **名称**: 巴利（Baal）
@@ -44,9 +47,11 @@ baal-standalone/
 ├── baal/                      # 核心模块
 │   ├── desktop_pet/          # 桌面宠物主模块
 │   │   ├── core/            # 核心功能（配置、LLM、表情）
-│   │   │   ├── config_manager.py     # API 密钥和设置管理
+│   │   │   ├── config_manager.py     # API 密钥和设置管理（跨平台支持）
 │   │   │   ├── llm_handler.py        # LLM 交互和流式响应
-│   │   │   └── emotion_manager.py    # 表情状态管理
+│   │   │   ├── emotion_manager.py    # 表情状态管理
+│   │   │   ├── persona_manager.py    # 人格系统管理
+│   │   │   └── single_instance.py    # 单实例运行保护
 │   │   ├── ui/              # UI 组件
 │   │   │   ├── pet_window.py         # 主宠物窗口
 │   │   │   ├── chat_bubble.py        # 对话气泡
@@ -55,10 +60,11 @@ baal-standalone/
 │   │   │   ├── goals_dialog.py       # 目标管理对话框
 │   │   │   └── calendar_dialog_modern.py # 现代化日历界面
 │   │   ├── main.py          # 主入口点
+│   │   ├── supervision_mode.py # 生产力监督系统
 │   │   └── test_*.py        # 各种测试文件
 │   ├── llm_assistant/       # LangChain 集成
 │   │   ├── assistant.py    # 完整功能的 LLM 助手
-│   │   ├── tools.py         # 自定义工具定义
+│   │   ├── binary_intent_classifier.py # 意图分类器
 │   │   └── parsers.py       # 结构化命令解析器
 │   ├── aw_stats/           # ActivityWatch 数据处理
 │   │   └── stats_processor.py # 活动数据分析
@@ -76,9 +82,14 @@ baal-standalone/
 ├── dist/                   # 分发文件（生成）
 ├── run_desktop_pet.py      # 主入口脚本
 ├── run_baal.py            # 备用入口脚本
-├── build.sh               # 自动化构建脚本
+├── build.sh               # macOS 自动化构建脚本
+├── build_macos.sh         # 增强 macOS 构建脚本
+├── build_windows.ps1      # Windows PowerShell 构建脚本
+├── build_windows.bat      # Windows 批处理构建脚本
 ├── fix_app.sh             # 应用修复脚本
-├── baal.spec              # PyInstaller 配置
+├── baal.spec              # 通用 PyInstaller 配置
+├── baal_macos.spec        # macOS 专用配置
+├── baal_windows.spec      # Windows 专用配置
 ├── requirements.txt       # Python 依赖
 ├── Info.plist            # macOS 应用元数据
 ├── test_*.py              # 根目录测试文件（日期、日历等）
@@ -131,6 +142,16 @@ venv\Scripts\activate     # Windows
 # 线程安全测试
 ./venv/bin/python baal/desktop_pet/test_thread_safe_summary.py
 
+# 人格切换测试（2025-08-11 新增）
+./venv/bin/python test_persona_switch.py                    # 人格系统测试
+
+# 单实例测试（2025-08-11 新增）
+./venv/bin/python test_single_instance.py                   # 单实例保护测试
+
+# Windows 配置测试（2025-08-11 新增）
+./venv/bin/python test_windows_config.py                    # Windows 配置管理
+./venv/bin/python debug_windows_config.py                   # Windows 配置调试
+
 # 日期解析测试（2025-08-10 新增）
 ./venv/bin/python test_date_fix.py                  # 基础日期修复测试
 ./venv/bin/python test_relative_dates.py            # 相对日期测试
@@ -143,11 +164,18 @@ venv\Scripts\activate     # Windows
 
 ### 构建命令
 ```bash
-# 完整自动化构建（推荐）
-./build.sh
+# macOS 构建
+./build.sh                   # 基础构建脚本
+./build_macos.sh            # 增强构建（带图标和 DMG）
+
+# Windows 构建
+.\build_windows.ps1         # PowerShell 脚本（推荐）
+.\build_windows.bat         # 批处理脚本（备选）
 
 # 手动 PyInstaller 构建
-./venv/bin/pyinstaller --clean --noconfirm baal.spec
+./venv/bin/pyinstaller --clean --noconfirm baal.spec        # 通用
+./venv/bin/pyinstaller --clean --noconfirm baal_macos.spec  # macOS
+./venv/bin/pyinstaller --clean --noconfirm baal_windows.spec # Windows
 
 # 创建 DMG（macOS 分发）
 dmgbuild -s scripts/dmgbuild-settings.py -D app=dist/Watch\ Cats.app "Watch Cats" dist/Watch\ Cats.dmg
@@ -163,6 +191,12 @@ dmgbuild -s scripts/dmgbuild-settings.py -D app=dist/Watch\ Cats.app "Watch Cats
 
 # 调试摘要功能
 ./venv/bin/python baal/desktop_pet/debug_summary.py
+
+# 启动测试
+./venv/bin/python test_startup.py
+
+# 查看日志
+./venv/bin/python view_logs.py
 ```
 
 ## 技术架构
@@ -220,6 +254,21 @@ dmgbuild -s scripts/dmgbuild-settings.py -D app=dist/Watch\ Cats.app "Watch Cats
 - **动态切换**: 基于对话内容自动切换表情
 - **基础动画**: GIF 循环动画作为默认状态
 
+#### 5. 人格系统
+- **PersonaManager**: 管理 3 种可切换的性格模式
+  - **严格主人（Strict Master）**: 命令式、严厉、高标准
+  - **嘲讽管家（Sarcastic Butler）**: 讽刺、幽默、毒舌
+  - **温柔伴侣（Gentle Companion）**: 鼓励、关怀、支持
+- **运行时切换**: 无需重启即可改变性格
+- **持久化保存**: 性格选择在会话间保持
+
+#### 6. 监督模式
+- **SupervisionMode**: 生产力监控和评估系统
+  - 实时活动跟踪
+  - 生产力评分算法
+  - 定期提醒和警告
+  - 详细的活动报告
+
 ### 关键实现细节
 
 #### 流式响应系统
@@ -269,10 +318,16 @@ height = max(25, schedule.duration_minutes * self.hour_height / 60)  # 最小25p
 - 异步结果聚合
 
 #### 配置管理
-- **用户配置**: `~/.baal_pet/config.json`
+- **用户配置路径**:
+  - macOS/Linux: `~/.baal_pet/config.json`
+  - Windows: `%APPDATA%/BaalPet/config.json`
+- **配置内容**:
   - API 密钥（OpenAI、火山引擎等）
   - 用户偏好设置
   - 窗口位置和大小
+  - 性格模式选择
+  - 监督模式设置
+- **跨平台兼容**: 自动处理路径和权限差异
 - **持久化存储**: JSON 格式的本地存储
 
 ### 构建系统
@@ -288,11 +343,21 @@ height = max(25, schedule.duration_minutes * self.hour_height / 60)  # 最小25p
 - **macOS 配置**: LSUIElement=1（菜单栏应用，无 Dock 图标）
 
 #### 构建流程
+
+##### macOS 构建
 1. **环境准备**: 自动创建/激活虚拟环境
 2. **依赖安装**: 从 requirements.txt 安装所有包
-3. **PyInstaller 打包**: 使用 baal.spec 创建应用包
-4. **macOS App Bundle**: 生成 .app 包含元数据和图标
-5. **DMG 创建**: 可选的磁盘映像用于分发
+3. **图标生成**: 使用 `create_baal_icons.sh` 创建多分辨率图标
+4. **PyInstaller 打包**: 使用 baal_macos.spec 创建应用包
+5. **macOS App Bundle**: 生成 .app 包含元数据和图标
+6. **DMG 创建**: 可选的磁盘映像用于分发
+
+##### Windows 构建
+1. **环境准备**: 创建/激活虚拟环境
+2. **依赖安装**: 安装所有必要包
+3. **图标转换**: 使用 `convert_icon.py` 生成 Windows 图标
+4. **PyInstaller 打包**: 使用 baal_windows.spec 创建 exe
+5. **ZIP 打包**: 压缩为分发包
 
 ## 依赖项详解
 
@@ -377,6 +442,23 @@ height = max(25, schedule.duration_minutes * self.hour_height / 60)  # 最小25p
     - 添加 `{current_time}`, `{today_date}`, `{tomorrow_date}`, `{day_after_tomorrow_date}` 占位符
     - `get_system_prompt()` 方法动态计算并填充这些日期
 
+### 9. Windows 配置保存问题（2025-08-11 已修复）
+- **问题**: Windows 上配置文件无法保存或读取
+- **原因**: 权限问题和路径处理不当
+- **解决**:
+  - 使用 `%APPDATA%/BaalPet/` 作为配置目录
+  - 自动创建目录结构
+  - 改进错误处理和回退机制
+  - 文件: `baal/desktop_pet/core/config_manager.py`
+
+### 10. 多实例运行问题（2025-08-11 已修复）
+- **问题**: 可以同时运行多个应用实例，导致冲突
+- **原因**: 缺少实例锁定机制
+- **解决**:
+  - 实现跨平台的单实例保护
+  - 使用文件锁和进程检查
+  - 文件: `baal/desktop_pet/core/single_instance.py`
+
 ## 开发提示
 
 ### 最佳实践
@@ -434,6 +516,9 @@ dmgbuild -s scripts/dmgbuild-settings.py -D app=dist/Watch\ Cats.app "Watch Cats
 3. **并行工具编排**: 并发 ActivityWatch 查询优化
 4. **情感驱动 UI**: 基于对话内容的动态视觉反馈
 5. **最小依赖设计**: 专注核心功能的精简版本
+6. **多人格系统**: 可切换的 AI 性格模式
+7. **智能监督模式**: 生产力监控和实时反馈
+8. **跨平台统一**: Windows/macOS 无缝体验
 
 ### 生产就绪特性
 - **全面的错误处理**: 组件缺失时的优雅降级
@@ -448,10 +533,36 @@ dmgbuild -s scripts/dmgbuild-settings.py -D app=dist/Watch\ Cats.app "Watch Cats
 
 ---
 
-*最后更新: 2025-08-10*
+*最后更新: 2025-08-12*
 *由 Claude Code 维护*
 
 ## 更新日志
+
+### 2025-08-12
+- **清理**: 移除重复的 parsers 2.py 文件
+- **文档**: 全面更新 CLAUDE.md，添加最新功能描述
+- **文档**: 更新项目结构说明，反映当前代码组织
+
+### 2025-08-11
+- **新增**: 人格系统（PersonaManager）- 3种可切换的AI性格
+  - 严格主人：命令式、高标准的监督者
+  - 嘲讽管家：毒舌、讽刺的助手
+  - 温柔伴侣：鼓励、关怀的陪伴者
+- **新增**: 单实例保护（SingleInstance）- 防止多个应用同时运行
+- **新增**: 监督模式（SupervisionMode）- 生产力监控系统
+- **改进**: Windows 配置管理 - 使用 AppData 目录，改进权限处理
+- **新增**: 跨平台构建脚本
+  - build_macos.sh：增强的 macOS 构建
+  - build_windows.ps1：PowerShell Windows 构建
+  - build_windows.bat：批处理 Windows 构建
+- **新增**: 平台专用 PyInstaller 配置
+  - baal_macos.spec：macOS 优化配置
+  - baal_windows.spec：Windows 优化配置
+- **新增**: 测试脚本
+  - test_persona_switch.py：人格切换测试
+  - test_single_instance.py：单实例测试
+  - test_windows_config.py：Windows 配置测试
+  - debug_windows_config.py：配置调试工具
 
 ### 2025-08-10
 - **修复**: 短时长日程（10分钟）在日历视图中不可见的问题

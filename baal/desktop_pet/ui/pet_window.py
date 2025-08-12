@@ -223,6 +223,11 @@ class PetWindow(QWidget):
         self.current_emotion = "<#5>"  # 默认正常表情
         self.current_emotion_pixmap = self.emotion_manager.get_emotion_pixmap("<#5>")
         
+        # 表情恢复计时器
+        self.emotion_reset_timer = QTimer()
+        self.emotion_reset_timer.timeout.connect(self._reset_emotion_to_default)
+        self.emotion_reset_timer.setSingleShot(True)  # 单次触发
+        
         # 是否已经显示过欢迎消息
         self._welcome_shown = False
         
@@ -374,11 +379,24 @@ class PetWindow(QWidget):
             self.current_emotion_pixmap = self.emotion_manager.get_emotion_pixmap(emotion_tag)
             self.update()  # 触发重绘
             
+            # 重置表情恢复计时器（10秒后恢复到默认表情）
+            self.emotion_reset_timer.stop()
+            self.emotion_reset_timer.start(10000)  # 10秒
+            
             self.logger.info(f"Emotion changed from {old_emotion} to {emotion_tag}")
         elif emotion_tag == self.current_emotion:
             self.logger.debug(f"Emotion unchanged: {emotion_tag}")
         else:
             self.logger.debug(f"Invalid emotion tag received: {emotion_tag}")
+    
+    def _reset_emotion_to_default(self):
+        """恢复到默认表情"""
+        default_emotion = self.emotion_manager.get_default_emotion()
+        if self.current_emotion != default_emotion:
+            self.logger.info(f"Resetting emotion to default: {default_emotion}")
+            self.current_emotion = default_emotion
+            self.current_emotion_pixmap = self.emotion_manager.get_emotion_pixmap(default_emotion)
+            self.update()  # 触发重绘
     
     @log_ui_event("tray_init")
     def _init_tray(self):
@@ -791,11 +809,17 @@ class PetWindow(QWidget):
         """处理流式输出结束"""
         self.logger.info("Stream output finished")
         self.chat_bubble.end_stream()
+        
+        # 启动表情恢复计时器（10秒后恢复默认表情）
+        self.emotion_reset_timer.stop()
+        self.emotion_reset_timer.start(10000)
     
     def _on_error_occurred(self, error: str):
         """处理错误"""
         self.logger.error(f"Error occurred in async worker: {error}")
         self.chat_bubble.show_message(f"出错了: {error}")
+        # 确保在出错时也结束流式输出状态
+        self.chat_bubble.end_stream()
     
     def _on_next_sentence_requested(self):
         """处理请求下一句"""
