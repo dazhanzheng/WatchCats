@@ -1,0 +1,5 @@
+{
+  "show_developer_mode": true,
+  "developer_mode_comment": "将此设置为false可以隐藏开发者模式菜单选项",
+  "note": "这个文件用于控制开发者模式的显示。发布时将show_developer_mode设置为false即可隐藏开发者选项。"
+}

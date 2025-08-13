@@ -31,14 +31,22 @@ class ConfigManager:
         self.config_dir = self._get_config_dir()
         self.config_file = self.config_dir / "config.json"
         
+        # 开发者配置文件路径（在项目根目录）
+        self.developer_config_file = Path(__file__).parent.parent.parent.parent / "developer_config.json"
+        
         self.logger.debug(f"Config directory: {self.config_dir}")
         self.logger.debug(f"Config file: {self.config_file}")
+        self.logger.debug(f"Developer config file: {self.developer_config_file}")
         
         # 确保配置目录存在
         self._ensure_config_dir()
         
         # 加载配置
         self.config = self._load_config()
+        
+        # 加载开发者配置
+        self._load_developer_config()
+        
         self.logger.info(f"Configuration loaded. API key configured: {self.is_configured()}")
     
     def _ensure_config_dir(self):
@@ -142,6 +150,25 @@ class ConfigManager:
             return Path.home() / ".baal_pet"
     
     @log_performance
+    def _load_developer_config(self):
+        """加载开发者配置"""
+        try:
+            if self.developer_config_file.exists():
+                with open(self.developer_config_file, 'r', encoding='utf-8') as f:
+                    dev_config = json.load(f)
+                    # 将开发者配置合并到主配置中
+                    if 'show_developer_mode' in dev_config:
+                        self.config['show_developer_mode'] = dev_config['show_developer_mode']
+                        self.logger.debug(f"Developer mode enabled: {dev_config['show_developer_mode']}")
+            else:
+                # 如果没有开发者配置文件，默认显示开发者模式
+                self.config['show_developer_mode'] = True
+                self.logger.debug("开发者配置文件不存在，默认启用开发者模式")
+        except Exception as e:
+            self.logger.warning(f"加载开发者配置失败: {e}")
+            # 出错时默认显示开发者模式
+            self.config['show_developer_mode'] = True
+    
     def _load_config(self) -> Dict[str, Any]:
         """加载配置文件"""
         if self.config_file.exists():

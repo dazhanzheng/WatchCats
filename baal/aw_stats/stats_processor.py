@@ -351,12 +351,12 @@ class StatsProcessor:
         """获取过去5分钟的AFK时间
         
         Returns:
-            包含AFK秒数的字典
+            包含AFK秒数和是否持续AFK的字典
         """
         try:
             afk_bucket = self._get_afk_bucket()
             if not afk_bucket:
-                return {'afk_seconds': 0}
+                return {'afk_seconds': 0, 'continuous_afk': False, 'last_active_seconds_ago': 0}
             
             end_time = datetime.now(timezone.utc)
             start_time = end_time - timedelta(minutes=5)
@@ -367,16 +367,47 @@ class StatsProcessor:
                 end=end_time
             )
             
-            # 计算AFK时间
+            # 按时间排序事件
+            events = sorted(events, key=lambda e: e.timestamp)
+            
+            # 计算AFK时间和检查连续性
             afk_seconds = 0
+            last_active_time = None
+            continuous_afk = False
+            
+            # 查找最近的活动时间
             for event in events:
                 if event.data.get('status') == 'afk':
                     afk_seconds += event.duration.total_seconds()
+                else:  # status == 'not-afk'
+                    # 记录最后一次活动的时间
+                    last_active_time = event.timestamp + event.duration
             
-            return {'afk_seconds': afk_seconds}
+            # 检查是否持续AFK
+            if last_active_time:
+                # 计算距离最后一次活动的时间
+                seconds_since_active = (end_time - last_active_time).total_seconds()
+                # 如果超过4分钟没有活动，认为是持续AFK
+                continuous_afk = seconds_since_active > 240
+            elif afk_seconds > 240:
+                # 如果没有活动记录且AFK时间超过4分钟，认为是持续AFK
+                continuous_afk = True
+                seconds_since_active = afk_seconds
+            else:
+                seconds_since_active = 0
+            
+            self.logger.debug(f"AFK状态: afk_seconds={afk_seconds:.1f}, "
+                            f"continuous_afk={continuous_afk}, "
+                            f"last_active={seconds_since_active:.1f}s ago")
+            
+            return {
+                'afk_seconds': afk_seconds,
+                'continuous_afk': continuous_afk,
+                'last_active_seconds_ago': seconds_since_active
+            }
         except Exception as e:
             self.logger.error(f"Failed to get AFK time: {e}")
-            return {'afk_seconds': 0}
+            return {'afk_seconds': 0, 'continuous_afk': False, 'last_active_seconds_ago': 0}
     
     def get_stats_today(self) -> str:
         """获取今日统计数据（从凌晨4点开始）

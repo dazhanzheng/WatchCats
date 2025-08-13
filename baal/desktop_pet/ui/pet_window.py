@@ -77,6 +77,7 @@ class DraggableButton(QPushButton):
 from .chat_bubble import ChatBubble
 from .settings_dialog import SettingsDialog
 from .supervision_dialog import SupervisionDialog, SupervisionStatusWidget
+from .developer_console import DeveloperConsole
 from ..core import ConfigManager, LLMHandler
 from ..core.persona_manager import PersonaLevel
 from ..core.emotion_manager import EmotionManager
@@ -241,6 +242,14 @@ class PetWindow(QWidget):
             self.logger.error(f"Failed to initialize advanced features: {e}", exc_info=True)
             # Continue without advanced features
         
+        # 初始化开发者控制台（在初始化时不创建，只在需要时创建）
+        self.developer_console = None
+        
+        # 气泡自动隐藏计时器
+        self.bubble_auto_hide_timer = QTimer()
+        self.bubble_auto_hide_timer.timeout.connect(self._auto_hide_bubble)
+        self.bubble_auto_hide_timer.setSingleShot(True)  # 单次触发
+        
         # 连接信号
         self.supervision_mode.reminder_needed.connect(self._on_supervision_reminder)
         self.supervision_mode.mode_changed.connect(self._on_supervision_mode_changed)
@@ -292,6 +301,7 @@ class PetWindow(QWidget):
             self.chat_bubble = ChatBubble()
             self.chat_bubble.next_sentence_requested.connect(self._on_next_sentence_requested)
             self.chat_bubble.message_sent.connect(self._on_bubble_message_sent)
+            self.chat_bubble.user_interaction.connect(self._reset_bubble_auto_hide_timer)
             
             # 应用当前的置顶设置到气泡窗口
             config = self.config_manager.get_config()
@@ -470,6 +480,13 @@ class PetWindow(QWidget):
         # 设置
         settings_action = tray_menu.addAction("设置")
         settings_action.triggered.connect(self._show_settings)
+        
+        # 开发者模式（可通过配置控制显示）
+        config = self.config_manager.get_config()
+        show_developer_mode = config.get('show_developer_mode', True)  # 默认显示
+        if show_developer_mode:
+            developer_action = tray_menu.addAction("开发者控制台")
+            developer_action.triggered.connect(self._show_developer_console)
         
         tray_menu.addSeparator()
         
@@ -754,17 +771,29 @@ class PetWindow(QWidget):
                 # 如果气泡未打开，则什么都不做（保持沉默）
     
     @log_ui_event("show_chat_bubble")
-    def _show_chat_bubble(self):
-        """显示对话气泡"""
+    def _show_chat_bubble(self, toggle=False):
+        """显示或切换对话气泡
+        
+        Args:
+            toggle: 是否切换显示状态（True=切换，False=仅显示）
+        """
         # 正确使用右键，重置双击计数器
         self.double_click_count = 0
         self.logger.debug("Double click counter reset")
         
-        if not self.chat_bubble.isVisible():
+        if toggle and self.chat_bubble.isVisible():
+            # 如果是切换模式且气泡已显示，则隐藏
+            self.chat_bubble.hide()
+            self.logger.debug("Chat bubble hidden")
+        elif not self.chat_bubble.isVisible():
+            # 如果气泡未显示，则显示
             self.chat_bubble.show()
             self.chat_bubble.raise_()
             # 设置气泡位置（使用保存的相对偏移）
             self.chat_bubble.set_position_relative_to(self, use_offset=True)
+            # 启动自动隐藏计时器
+            self._start_bubble_auto_hide_timer()
+            self.logger.debug("Chat bubble shown")
             # 聚焦到输入框
             self.chat_bubble.input_field.setFocus()
             self.logger.info("Chat bubble shown and focused")
@@ -775,6 +804,9 @@ class PetWindow(QWidget):
     def _on_bubble_message_sent(self, user_input: str):
         """处理从气泡发送的消息"""
         self.logger.info(f"Message sent from bubble: {user_input[:50]}...")
+        
+        # 重置自动隐藏计时器（用户有交互）
+        self._reset_bubble_auto_hide_timer()
         
         # 检查是否已配置
         if not self.config_manager.is_configured():
@@ -858,6 +890,23 @@ class PetWindow(QWidget):
             # 隐藏提示
             self.chat_bubble.hide_summary_hint()
             self.logger.debug("Summary hint hidden")
+    
+    def _show_developer_console(self):
+        """显示开发者控制台"""
+        try:
+            # 如果控制台还没有创建，则创建它
+            if self.developer_console is None:
+                self.developer_console = DeveloperConsole(self)
+                self.logger.info("开发者控制台已创建")
+            
+            # 显示控制台
+            self.developer_console.show()
+            self.developer_console.raise_()
+            self.developer_console.activateWindow()
+            
+        except Exception as e:
+            self.logger.error(f"显示开发者控制台失败: {e}", exc_info=True)
+            QMessageBox.warning(self, "错误", f"无法打开开发者控制台: {str(e)}")
     
     def _show_settings(self):
         """显示设置对话框"""
@@ -1123,14 +1172,14 @@ class PetWindow(QWidget):
             self.logger.warning(f"无法设置Windows置顶: {e}")
     
     def _show_chat_from_tray(self):
-        """从托盘显示聊天窗口"""
+        """从托盘切换聊天窗口"""
         # 先确保主窗口可见
         if not self.isVisible():
             self.show()
             self.toggle_action.setText("隐藏桌宠")
         
-        # 显示聊天气泡
-        self._show_chat_bubble()
+        # 切换聊天气泡显示状态
+        self._show_chat_bubble(toggle=True)
     
     def _quit_application(self):
         """完全退出应用程序"""
@@ -1189,9 +1238,10 @@ class PetWindow(QWidget):
         """显示右键菜单"""
         menu = QMenu(self)
         
-        # 聊天
-        chat_action = menu.addAction("聊天")
-        chat_action.triggered.connect(self._show_chat_bubble)
+        # 聊天（根据气泡状态显示不同文本）
+        chat_text = "隐藏聊天" if self.chat_bubble.isVisible() else "聊天"
+        chat_action = menu.addAction(chat_text)
+        chat_action.triggered.connect(lambda: self._show_chat_bubble(toggle=True))
         
         menu.addSeparator()
         
@@ -1382,6 +1432,36 @@ class PetWindow(QWidget):
         """监督模式状态变更处理"""
         self._update_supervision_button_style()
     
+    def _start_bubble_auto_hide_timer(self, timeout=20000):
+        """启动气泡自动隐藏计时器
+        
+        Args:
+            timeout: 超时时间（毫秒），默认20秒
+        """
+        # 停止之前的计时器
+        self.bubble_auto_hide_timer.stop()
+        # 启动新的计时器
+        self.bubble_auto_hide_timer.start(timeout)
+        self.logger.debug(f"Bubble auto-hide timer started: {timeout/1000}s")
+    
+    def _auto_hide_bubble(self):
+        """自动隐藏气泡"""
+        if self.chat_bubble.isVisible():
+            # 检查是否正在输入或流式输出
+            if hasattr(self.chat_bubble, 'is_streaming') and self.chat_bubble.is_streaming:
+                # 如果正在流式输出，延长计时器
+                self._start_bubble_auto_hide_timer(10000)  # 再等待10秒
+                return
+            
+            self.chat_bubble.hide()
+            self.logger.info("气泡已自动隐藏（用户无交互）")
+    
+    def _reset_bubble_auto_hide_timer(self):
+        """重置自动隐藏计时器（用户有交互时调用）"""
+        if self.chat_bubble.isVisible():
+            self._start_bubble_auto_hide_timer()
+            self.logger.debug("用户交互，重置自动隐藏计时器")
+    
     def _on_supervision_reminder(self, context: dict):
         """处理监督模式提醒"""
         # Windows特殊处理：确保窗口从最小化或隐藏状态恢复
@@ -1419,7 +1499,10 @@ class PetWindow(QWidget):
         
         self.chat_bubble.raise_()
         self.chat_bubble.activateWindow()
-        self._update_bubble_position()
+        # 设置气泡位置
+        self.chat_bubble.set_position_relative_to(self, use_offset=True)
+        # 重置自动隐藏计时器（提醒后不应该立即消失）
+        self._start_bubble_auto_hide_timer(30000)  # 提醒后30秒消失
         
         # 获取提醒消息（由LLM生成的个性化消息）
         reminder_message = context.get('reminder_message')

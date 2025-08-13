@@ -12,6 +12,10 @@ from ..aw_stats.stats_processor import StatsProcessor
 from ..llm_assistant.assistant import LLMAssistant
 from .core.config_manager import ConfigManager
 import json
+import logging
+
+# 获取监督模式专用日志记录器
+logger = logging.getLogger('supervision')
 
 
 class SupervisionMode(QObject):
@@ -41,9 +45,11 @@ class SupervisionMode(QObject):
         self.check_thread: Optional[threading.Thread] = None
         # 检查间隔（秒）- 可以通过环境变量调整，便于测试
         import os
-        self.check_interval = int(os.environ.get('SUPERVISION_CHECK_INTERVAL', '300'))  # 默认5分钟
-        if self.check_interval != 300:
-            print(f"[监督模式] 检查间隔设置为 {self.check_interval} 秒")
+        # 默认5分钟（300秒），可通过环境变量调整
+        self.check_interval = int(os.environ.get('SUPERVISION_CHECK_INTERVAL', '300'))  # 生产环境：5分钟
+        logger.info(f"监督模式检查间隔设置为 {self.check_interval} 秒")
+        
+        logger.debug("监督模式管理器初始化完成")
         self.last_check_time = None
         
         # 加载保存的监督设置
@@ -61,8 +67,9 @@ class SupervisionMode(QObject):
                     temperature=0.1,
                     stats_processor=self.stats_processor
                 )
+                logger.info("LLM助手初始化成功")
         except Exception as e:
-            print(f"初始化LLM助手失败: {e}")
+            logger.error(f"初始化LLM助手失败: {e}")
             self.llm_assistant = None
     
     def _load_supervision_settings(self):
@@ -80,8 +87,9 @@ class SupervisionMode(QObject):
                     if 'tasks' in data and not self.short_term_goals:
                         self.short_term_goals = data['tasks']
                     # 不自动恢复激活状态，需要用户手动开启
+                    logger.debug(f"加载监督设置成功: 长期目标={self.long_term_goal}, 短期目标数={len(self.short_term_goals)}")
         except Exception as e:
-            print(f"加载监督设置失败: {e}")
+            logger.warning(f"加载监督设置失败: {e}")
     
     def _save_supervision_settings(self):
         """保存监督设置"""
@@ -94,8 +102,9 @@ class SupervisionMode(QObject):
             }
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
+            logger.debug("监督设置已保存")
         except Exception as e:
-            print(f"保存监督设置失败: {e}")
+            logger.error(f"保存监督设置失败: {e}")
     
     def start_supervision(self, long_term_goal: str = None, short_term_goals: list = None):
         """启动监督模式
@@ -111,7 +120,7 @@ class SupervisionMode(QObject):
             
             # 如果仍然没有LLM助手，说明未配置API
             if not self.llm_assistant:
-                print("错误：监督模式需要配置API密钥才能正常工作")
+                logger.error("监督模式需要配置API密钥才能正常工作")
                 return False  # 返回False表示启动失败
         
         # 如果提供了新的目标，更新它们
@@ -131,128 +140,171 @@ class SupervisionMode(QObject):
             self.check_thread.start()
         
         self.mode_changed.emit(True)
-        print(f"监督模式已启动 - 长期目标: {self.long_term_goal}")
+        logger.info(f"监督模式已启动 - 长期目标: {self.long_term_goal}")
+        logger.debug(f"短期目标: {self.short_term_goals}")
         return True
     
     def stop_supervision(self):
         """停止监督模式"""
         self.is_active = False
         self.mode_changed.emit(False)
-        print("监督模式已停止")
+        logger.info("监督模式已停止")
     
     def _check_loop(self):
         """检查循环"""
-        print(f"[监督模式] 检查线程已启动，每{self.check_interval}秒检查一次")
+        logger.info(f"检查线程已启动，每{self.check_interval}秒检查一次")
         
         # 首次启动后立即进行一次检查（可选，用于测试）
         # 如果不想立即检查，可以注释掉这部分
         if self.is_active:
-            print("[监督模式] 执行首次检查...")
+            logger.debug("执行首次检查...")
             try:
                 self._check_activity()
             except Exception as e:
-                print(f"[监督模式] 首次检查出错: {e}")
+                logger.error(f"首次检查出错: {e}")
         
         while self.is_active:
             # 等待指定间隔
             for i in range(self.check_interval):
                 if not self.is_active:
-                    print("[监督模式] 检查线程已停止")
+                    logger.info("检查线程已停止")
                     return
                 time.sleep(1)
             
             if not self.is_active:
                 break
             
-            print(f"[监督模式] 执行定期检查... (时间: {datetime.now().strftime('%H:%M:%S')})")
+            logger.debug(f"执行定期检查... (时间: {datetime.now().strftime('%H:%M:%S')})")
             try:
                 self._check_activity()
             except Exception as e:
-                print(f"[监督模式] 检查活动时出错: {e}")
+                logger.error(f"检查活动时出错: {e}")
         
-        print("[监督模式] 检查循环已退出")
+        logger.info("检查循环已退出")
     
     def _check_activity(self):
         """检查用户活动是否符合目标"""
         # 获取过去5分钟的活动数据
         current_time = datetime.now()
-        print(f"[监督模式] 开始检查活动... (时间: {current_time.strftime('%H:%M:%S')})")
+        logger.info(f"开始检查活动... (时间: {current_time.strftime('%H:%M:%S')})")
         
         # 首先检查AFK状态
         if self._is_user_afk():
-            print("[监督模式] 用户处于AFK状态，跳过监督检查")
+            logger.debug("用户处于AFK状态，跳过监督检查")
             self.last_check_time = current_time
             return
         
-        print("[监督模式] 用户活跃，获取活动统计...")
+        logger.debug("用户活跃，获取活动统计...")
         # 获取多时段的活动统计
         stats = self._get_comprehensive_activity_stats()
         
         if stats:
-            print("[监督模式] 统计数据获取成功，进行LLM评估...")
+            logger.debug(f"统计数据获取成功: {list(stats.keys())}")
             # 使用增强的LLM评估
             evaluation_result = self._evaluate_activity_enhanced(stats)
             
             if evaluation_result:
-                print(f"[监督模式] 评估结果: should_remind={evaluation_result.get('should_remind')}, "
+                logger.info(f"评估结果: should_remind={evaluation_result.get('should_remind')}, "
                       f"deviation_level={evaluation_result.get('deviation_level', '未知')}")
                 
                 if evaluation_result.get('should_remind'):
-                    print("[监督模式] 需要提醒用户！")
+                    logger.warning("需要提醒用户！")
                     # 生成增强的提醒内容
                     reminder_context = self._create_enhanced_reminder_context(stats, evaluation_result)
                     self.reminder_needed.emit(reminder_context)
-                    print("[监督模式] 提醒信号已发送")
+                    logger.debug(f"提醒内容: {reminder_context.get('message', '')[:100]}...")
                 else:
-                    print("[监督模式] 用户活动符合目标，无需提醒")
+                    logger.info("用户活动符合目标，无需提醒")
             else:
-                print("[监督模式] 评估结果为空")
+                logger.warning("评估结果为空")
         else:
-            print("[监督模式] 无法获取统计数据")
+            logger.error("无法获取统计数据")
         
         self.last_check_time = current_time
     
     def _is_user_afk(self) -> bool:
-        """检查用户是否处于AFK状态
+        """检查用户是否处于持续AFK状态
+        
+        判断标准:
+        1. 使用ActivityWatch的AFK监视器数据
+        2. 检查用户是否持续AFK超过4分钟
+        3. 或者用户在过去5分钟内的总AFK时间超过4分钟且最近是AFK状态
         
         Returns:
-            True如果用户在过去5分钟完全AFK，False否则
+            True如果用户持续AFK，False否则
         """
         try:
             with self.stats_processor as sp:
-                # 获取AFK时长（空闲时间）
+                # 获取AFK统计
                 afk_stats = sp.get_afk_time_5m()
-                # 如果AFK时间超过4分钟（240秒），认为用户完全AFK
-                return afk_stats and afk_stats.get('afk_seconds', 0) > 240
+                
+                if not afk_stats:
+                    logger.warning("AFK统计数据为空")
+                    return False
+                
+                # 获取各项指标
+                afk_seconds = afk_stats.get('afk_seconds', 0)
+                continuous_afk = afk_stats.get('continuous_afk', False)
+                last_active_seconds = afk_stats.get('last_active_seconds_ago', 0)
+                
+                # 判断是否持续AFK
+                # 条件1: 明确标记为持续AFK
+                # 条件2: 距离最后一次活动超过4分钟
+                # 条件3: 总AFK时间超过4.5分钟（给予一定容错）
+                is_afk = continuous_afk or last_active_seconds > 240 or afk_seconds > 270
+                
+                logger.info(f"AFK检查结果: afk_seconds={afk_seconds:.1f}s, "
+                          f"continuous_afk={continuous_afk}, "
+                          f"last_active={last_active_seconds:.1f}s ago, "
+                          f"is_afk={is_afk}")
+                
+                return is_afk
         except Exception as e:
-            print(f"检查AFK状态失败: {e}")
+            logger.error(f"检查AFK状态失败: {e}", exc_info=True)
             return False
     
     def _get_comprehensive_activity_stats(self) -> Dict[str, Any]:
         """获取多时段的综合活动统计
         
         Returns:
-            包含5分钟、2小时和当日活动统计的字典
+            包含5分钟、2小时和24小时活动统计的字典
         """
         try:
             with self.stats_processor as sp:
+                logger.info("开始获取多时段活动统计...")
+                
                 # 5分钟数据
                 stats_5m = sp.get_stats_5m()
+                logger.debug(f"✓ 5分钟数据获取成功 (长度: {len(stats_5m)} 字符)")
                 
                 # 2小时数据
                 stats_2h = sp.get_stats_2h()
+                logger.debug(f"✓ 2小时数据获取成功 (长度: {len(stats_2h)} 字符)")
                 
-                # 当日数据（从凌晨4点开始）
-                stats_today = sp.get_stats_today()
+                # 24小时数据（获取今日数据作为24小时数据）
+                stats_24h = sp.get_stats_today()
+                logger.debug(f"✓ 24小时数据获取成功 (长度: {len(stats_24h)} 字符)")
                 
-                return {
+                # 额外获取精确的过去24小时数据
+                try:
+                    stats_last_24h = sp.get_detailed_stats(24)
+                    logger.debug(f"✓ 精确24小时数据获取成功 (长度: {len(stats_last_24h)} 字符)")
+                except:
+                    stats_last_24h = stats_24h  # 如果失败，使用今日数据作为备份
+                
+                result = {
                     'stats_5m': stats_5m,
                     'stats_2h': stats_2h,
-                    'stats_today': stats_today,
+                    'stats_today': stats_24h,  # 今日数据（从凌晨4点）
+                    'stats_24h': stats_last_24h,  # 过去24小时数据
                     'timestamp': datetime.now().isoformat()
                 }
+                
+                logger.info("✓ 所有时段数据获取完成")
+                return result
+                
         except Exception as e:
-            print(f"获取综合活动统计失败: {e}")
+            logger.error(f"获取综合活动统计失败: {e}", exc_info=True)
             return {}
     
     def _get_recent_activity_stats(self) -> Dict[str, Any]:
@@ -307,7 +359,7 @@ class SupervisionMode(QObject):
         """
         # 必须有LLM助手才能进行评估
         if not self.llm_assistant:
-            print("警告：监督模式需要配置LLM才能正常工作")
+            logger.warning("监督模式需要配置LLM才能正常工作")
             return None
         
         try:
@@ -315,6 +367,21 @@ class SupervisionMode(QObject):
             from .core.persona_manager import PersonaManager
             persona_manager = PersonaManager()
             current_persona = persona_manager.get_current_persona_info()
+            
+            # 准备各时段数据（限制长度但保留关键信息）
+            stats_5m = stats.get('stats_5m', '无数据')
+            stats_2h = stats.get('stats_2h', '无数据')
+            stats_24h = stats.get('stats_24h', stats.get('stats_today', '无数据'))  # 优先使用24小时，其次今日
+            
+            # 智能截断：保留前1000字符（通常包含最重要的应用信息）
+            if len(stats_5m) > 1000:
+                stats_5m = stats_5m[:1000] + "...(数据已截断)"
+            if len(stats_2h) > 1000:
+                stats_2h = stats_2h[:1000] + "...(数据已截断)"
+            if len(stats_24h) > 1000:
+                stats_24h = stats_24h[:1000] + "...(数据已截断)"
+            
+            logger.debug(f"准备发送给LLM的数据长度 - 5分钟:{len(stats_5m)}, 2小时:{len(stats_2h)}, 24小时:{len(stats_24h)}")
             
             # 构建增强的评估提示
             prompt = f"""你是巴利（Baal），一个监督用户生产力的桌面宠物助手。
@@ -325,33 +392,47 @@ class SupervisionMode(QObject):
 长期目标：{self.long_term_goal if self.long_term_goal else '未设定'}
 短期目标：{', '.join(self.short_term_goals) if self.short_term_goals else '未设定'}
 
-用户的电脑使用情况：
+用户的电脑使用情况（多时段综合分析）：
 
-过去5分钟：
-{stats.get('stats_5m', '无数据')[:500]}
+【过去5分钟 - 即时行为】
+{stats_5m}
 
-过去2小时：
-{stats.get('stats_2h', '无数据')[:500]}
+【过去2小时 - 短期趋势】
+{stats_2h}
 
-今日总体（从凌晨4点开始）：
-{stats.get('stats_today', '无数据')[:500]}
+【过去24小时 - 整体表现】
+{stats_24h}
 
-请分析用户的活动是否符合其设定的目标，并按照以下JSON格式回答：
+请综合分析以上三个时段的数据：
+1. 5分钟数据反映用户当前正在做什么
+2. 2小时数据显示短期行为模式
+3. 24小时数据展示整体生产力状况
+
+根据分析结果，按照以下JSON格式回答：
 {{
     "should_remind": true或false（是否需要提醒用户）,
-    "deviation_level": "严重"或"中度"或"轻微"（偏离程度）,
+    "deviation_level": "严重"或"中度"或"轻微"或"无"（偏离程度）,
     "reminder_message": "根据人设特点的提醒内容，使用中文",
-    "analysis": "简短的分析说明"
+    "analysis": "简短的分析说明，包含对三个时段数据的综合判断",
+    "time_period_analysis": {{
+        "5m": "5分钟行为分析",
+        "2h": "2小时趋势分析", 
+        "24h": "24小时整体分析"
+    }}
 }}
 
-注意：
-1. 如果用户正在做与目标相关的事情，不要提醒
-2. 只有当用户明显偏离目标时才提醒
-3. 提醒内容必须符合当前人设的语言风格
+决策规则：
+1. 如果5分钟数据显示用户正在做与目标相关的事情，即使2小时或24小时有偏离，也不要立即提醒
+2. 如果5分钟和2小时都显示偏离，应该提醒
+3. 如果只是24小时整体偏离但当前正在改善，给予鼓励而非批评
+4. 提醒内容必须符合当前人设的语言风格
+5. 避免过于频繁的提醒，只在明显偏离时才提醒
 """
             
+            logger.debug("发送评估请求给LLM...")
             # 使用LLM评估
             response = self.llm_assistant.chat(prompt)
+            logger.debug(f"收到LLM响应 (长度: {len(response)} 字符)")
             
             # 解析JSON响应
             import json
@@ -360,13 +441,25 @@ class SupervisionMode(QObject):
                 json_start = response.index('{')
                 json_end = response.rindex('}') + 1
                 json_str = response[json_start:json_end]
-                return json.loads(json_str)
+                result = json.loads(json_str)
+                
+                # 记录评估结果
+                logger.info(f"LLM评估完成: should_remind={result.get('should_remind')}, "
+                          f"deviation_level={result.get('deviation_level', '未知')}")
+                if result.get('time_period_analysis'):
+                    logger.debug(f"时段分析: {result['time_period_analysis']}")
+                
+                return result
             else:
+                logger.warning("无法从LLM响应中解析JSON")
                 # 如果无法解析JSON，默认不提醒
                 return {'should_remind': False}
             
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON解析错误: {e}")
+            return {'should_remind': False}
         except Exception as e:
-            print(f"增强评估活动时出错: {e}")
+            logger.error(f"增强评估活动时出错: {e}", exc_info=True)
             return None
     
     def _evaluate_activity(self, stats: Dict[str, Any]) -> bool:

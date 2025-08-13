@@ -16,6 +16,7 @@ class ChatBubble(QWidget):
     # 信号
     next_sentence_requested = pyqtSignal()
     message_sent = pyqtSignal(str)  # 用户发送消息的信号
+    user_interaction = pyqtSignal()  # 用户交互信号（用于重置自动隐藏计时器）
     
     def __init__(self):
         """初始化对话气泡"""
@@ -505,6 +506,8 @@ class ChatBubble(QWidget):
     
     def mousePressEvent(self, event):
         """处理鼠标点击事件"""
+        # 发出用户交互信号
+        self.user_interaction.emit()
         # 允许拖动窗口
         if event.button() == Qt.MouseButton.LeftButton:
             self.drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
