@@ -81,7 +81,6 @@ baal-standalone/
 ├── build/                  # 构建工件（生成）
 ├── dist/                   # 分发文件（生成）
 ├── run_desktop_pet.py      # 主入口脚本
-├── run_baal.py            # 备用入口脚本
 ├── build.sh               # macOS 自动化构建脚本
 ├── build_macos.sh         # 增强 macOS 构建脚本
 ├── build_windows.ps1      # Windows PowerShell 构建脚本
@@ -92,7 +91,7 @@ baal-standalone/
 ├── baal_windows.spec      # Windows 专用配置
 ├── requirements.txt       # Python 依赖
 ├── Info.plist            # macOS 应用元数据
-├── test_*.py              # 根目录测试文件（日期、日历等）
+├── test_*.py              # 根目录测试文件
 └── CLAUDE.md             # 本文档
 ```
 
@@ -119,7 +118,6 @@ venv\Scripts\activate     # Windows
 # 备用运行方式
 ./venv/bin/python -m baal.desktop_pet
 ./venv/bin/python baal/desktop_pet/main.py
-./venv/bin/python run_baal.py
 ```
 
 ### 测试命令
@@ -139,9 +137,6 @@ venv\Scripts\activate     # Windows
 # 日程功能测试
 ./venv/bin/python baal/desktop_pet/test_schedule_*.py
 
-# 线程安全测试
-./venv/bin/python baal/desktop_pet/test_thread_safe_summary.py
-
 # 人格切换测试（2025-08-11 新增）
 ./venv/bin/python test_persona_switch.py                    # 人格系统测试
 
@@ -150,16 +145,17 @@ venv\Scripts\activate     # Windows
 
 # Windows 配置测试（2025-08-11 新增）
 ./venv/bin/python test_windows_config.py                    # Windows 配置管理
-./venv/bin/python debug_windows_config.py                   # Windows 配置调试
+# 意图分类测试（2025-08-13 新增）
+./venv/bin/python test_intent_classifier_direct.py   # 直接意图分类测试
 
-# 日期解析测试（2025-08-10 新增）
-./venv/bin/python test_date_fix.py                  # 基础日期修复测试
-./venv/bin/python test_relative_dates.py            # 相对日期测试
-./venv/bin/python test_enhanced_dates.py            # 增强日期测试
-./venv/bin/python test_date_comprehensive.py        # 综合日期测试
+# 配置管理测试（2025-08-12 新增）
+./venv/bin/python test_config_isolated.py           # 隔离配置测试
+./venv/bin/python test_enhanced_config.py           # 增强配置测试
+./venv/bin/python test_windows_config_fixed.py      # Windows 配置修复测试
 
-# 日历显示测试（2025-08-10 新增）
-./venv/bin/python test_short_schedule.py            # 短时长日程显示测试
+# Bug 修复测试（2025-08-12 新增）
+./venv/bin/python test_bug_fixes.py                 # Bug 修复集成测试
+./venv/bin/python test_bug_fixes_unit.py            # Bug 修复单元测试
 ```
 
 ### 构建命令
@@ -533,10 +529,22 @@ dmgbuild -s scripts/dmgbuild-settings.py -D app=dist/Watch\ Cats.app "Watch Cats
 
 ---
 
-*最后更新: 2025-08-12*
+*最后更新: 2025-08-13*
 *由 Claude Code 维护*
 
 ## 更新日志
+
+### 2025-08-13
+- **代码清理**: 删除12个重复和无用的文件
+  - 移除重复的入口文件（run_baal.py, baal/main.py）
+  - 移除未使用的模块（config_manager_enhanced.py, windows_utils.py）
+  - 清理过时的测试文件（6个不再需要的测试）
+  - 删除分发DMG文件
+- **文档更新**: 更新 CLAUDE.md 反映当前项目状态
+  - 更新项目结构说明
+  - 移除对已删除文件的引用
+  - 更新测试命令列表
+- **代码优化**: 清理无用的代码注释和调试语句
 
 ### 2025-08-12
 - **清理**: 移除重复的 parsers 2.py 文件

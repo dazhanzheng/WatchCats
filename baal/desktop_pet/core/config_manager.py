@@ -350,4 +350,6 @@ class ConfigManager:
         """获取完整配置"""
         self.logger.debug("Getting full configuration")
         # 返回配置的副本，避免外部修改
-        return self.config.copy() 
+        return self.config.copy()
+    
+ 

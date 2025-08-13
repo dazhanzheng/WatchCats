@@ -5,13 +5,11 @@
 输出格式：3位二进制字符串
 - 第1位：是否是普通聊天 (1=聊天, 0=需要工具)
 - 第2位：是否需要统计查询 (1=需要, 0=不需要)
-- 第3位：是否需要日程查询 (1=需要, 0=不需要)
+- 第3位：保留位 (始终为0)
 
 示例：
 - "100" = 普通聊天
 - "010" = 只需要统计
-- "001" = 只需要日程
-- "011" = 需要统计和日程
 """
 
 from typing import Tuple
@@ -39,13 +37,13 @@ class BinaryIntentClassifier:
 - 只输出3个数字，每个数字只能是0或1
 - 第1位：普通聊天=1，需要工具=0
 - 第2位：需要统计=1，不需要=0
-- 第3位：需要日程=1，不需要=0
+- 第3位：保留位=0（始终为0）
 
 示例：
 用户："你好" → 输出：100
 用户："我今天做了什么" → 输出：010
-用户："明天有什么安排" → 输出：001
-用户："今天工作了多久？明天有会议吗" → 输出：011
+用户："今天工作了多久？" → 输出：010
+用户："明天有什么安排" → 输出：100
 
 重要：只输出3个数字，不要有任何其他内容！"""),
             ("human", "{input}")
@@ -101,10 +99,10 @@ class BinaryIntentClassifier:
         
         is_chat = binary_str[0] == '1'
         needs_stats = binary_str[1] == '1'
-        needs_schedule = binary_str[2] == '1'
+        needs_schedule = False  # 第3位为保留位，始终返回False
         
         # 逻辑检查：如果需要工具，则不是普通聊天
-        if needs_stats or needs_schedule:
+        if needs_stats:
             is_chat = False
         
         return (is_chat, needs_stats, needs_schedule) 

@@ -17,13 +17,10 @@ from langchain.schema import SystemMessage, HumanMessage, AIMessage
 from langchain.callbacks import StreamingStdOutCallbackHandler
 
 from ..aw_stats import StatsProcessor
-from ..scheduler import ScheduleManager, Schedule
 from ..desktop_pet.core.logger_config import get_logger, log_performance, log_api_call
 from .parsers import (
     StatsCommandParser,
-    ScheduleCommandParser,
-    ParsedStatsCommand,
-    ParsedScheduleCommand
+    ParsedStatsCommand
 )
 
 logger = logging.getLogger(__name__)
@@ -40,7 +37,6 @@ class LLMAssistant:
         temperature: float = 0.1,  # 保留原参数以保持向后兼容
         parse_temperature: Optional[float] = None,  # 新增：解析温度
         chat_temperature: Optional[float] = None,   # 新增：对话温度
-        schedule_manager: Optional[ScheduleManager] = None,
         stats_processor: Optional[StatsProcessor] = None,
         streaming: bool = True,
         developer_mode: bool = False  # 新增开发者模式
@@ -55,7 +51,6 @@ class LLMAssistant:
             temperature: 温度参数（建议低温度以获得精确输出）
             parse_temperature: 结构化解析温度（默认 0.1）
             chat_temperature: 对话生成温度（默认 0.7）
-            schedule_manager: 日程管理器实例
             stats_processor: 统计处理器实例
             streaming: 是否启用流式输出
             developer_mode: 是否启用开发者模式（输出中间变量）
@@ -113,10 +108,8 @@ class LLMAssistant:
         
         # 初始化解析器
         self.stats_parser = StatsCommandParser()
-        self.schedule_parser = ScheduleCommandParser()
         
         # 初始化业务模块
-        self.schedule_manager = schedule_manager or ScheduleManager()
         self.stats_processor = stats_processor
         
         # 对话历史
@@ -145,7 +138,6 @@ class LLMAssistant:
 
 核心职责：
 1. 监控仆人的ActivityWatch活动统计
-2. 管理仆人的日程，确保他们服从安排
 
 交流原则：
 - 用"我"自称，称用户为"仆人"
@@ -272,241 +264,6 @@ class LLMAssistant:
                 traceback.print_exc()
             return f"查询失败：{str(e)}"
     
-    def process_schedule_command(self, query: str) -> str:
-        """
-        处理日程管理命令
-        
-        Args:
-            query: 用户的命令
-            
-        Returns:
-            执行结果
-        """
-        if self.developer_mode:
-            print(f"\n[开发者模式] process_schedule_command 开始")
-            print(f"  - 输入命令: {query}")
-            
-        try:
-            # 获取解析提示词
-            parse_messages = [
-                SystemMessage(content=self.schedule_parser.get_system_prompt()),
-                HumanMessage(content=self.schedule_parser.get_user_prompt(query))
-            ]
-            
-            if self.developer_mode:
-                print(f"\n[开发者模式] 日程解析提示词:")
-                print(f"  - System: {parse_messages[0].content[:200]}...")
-                print(f"  - User: {parse_messages[1].content}")
-            
-            # 解析命令 - 使用低温度 LLM
-            response = self.parse_llm.invoke(parse_messages)
-            
-            if self.developer_mode:
-                print(f"\n[开发者模式] LLM 原始响应:")
-                print(f"  {response.content}")
-            
-            # 处理响应内容，提取 JSON 部分
-            content = response.content
-            
-            # 如果内容包含 JSON 代码块，提取它
-            json_match = re.search(r'```json\s*(.*?)\s*```', content, re.DOTALL)
-            if json_match:
-                content = json_match.group(1)
-            # 否则尝试找到 JSON 对象
-            else:
-                # 移除可能的前缀文本
-                json_start = content.find('{')
-                if json_start != -1:
-                    content = content[json_start:]
-                # 找到 JSON 结束位置
-                brace_count = 0
-                json_end = -1
-                for i, char in enumerate(content):
-                    if char == '{':
-                        brace_count += 1
-                    elif char == '}':
-                        brace_count -= 1
-                        if brace_count == 0:
-                            json_end = i + 1
-                            break
-                if json_end != -1:
-                    content = content[:json_end]
-            
-            if self.developer_mode:
-                print(f"\n[开发者模式] 提取的 JSON:")
-                print(f"  {content}")
-                
-            logger.debug(f"解析的 JSON 内容: {content}")
-            parsed_command = self.schedule_parser.parser.parse(content)
-            
-            if self.developer_mode:
-                print(f"\n[开发者模式] 解析后的命令:")
-                print(f"  - method: {parsed_command.method}")
-                if parsed_command.create_params:
-                    print(f"  - create_params: {parsed_command.create_params}")
-                if parsed_command.update_params:
-                    print(f"  - update_params: {parsed_command.update_params}")
-                if parsed_command.schedule_id:
-                    print(f"  - schedule_id: {parsed_command.schedule_id}")
-            
-            # 在查询类操作前重新加载日程数据，确保获取最新内容
-            if parsed_command.method in ["list", "get", "get_current", "get_upcoming", "get_schedules_for_date"]:
-                self.logger.debug("Reloading schedule data before query...")
-                count = self.schedule_manager.reload()
-                self.logger.debug(f"Reloaded {count} schedules")
-            
-            # 执行命令
-            if parsed_command.method == "add":
-                params = parsed_command.create_params
-                schedule = self.schedule_manager.add(
-                    title=params.title,
-                    details=params.details,
-                    start_time=params.start_time,
-                    duration_minutes=params.duration_minutes,
-                    trigger_percentages=params.trigger_percentages,
-                    metadata=params.metadata
-                )
-                return f"已创建日程：{schedule.title}（ID: {schedule.id}），开始时间：{schedule.start_time.strftime('%Y-%m-%d %H:%M')}"
-            
-            elif parsed_command.method == "update":
-                params = parsed_command.update_params
-                schedule = self.schedule_manager.update(
-                    schedule_id=params.schedule_id,
-                    title=params.title,
-                    details=params.details,
-                    start_time=params.start_time,
-                    duration_minutes=params.duration_minutes,
-                    trigger_percentages=params.trigger_percentages,
-                    is_active=params.is_active,
-                    metadata=params.metadata
-                )
-                if schedule:
-                    return f"已更新日程：{schedule.title}"
-                else:
-                    return f"未找到ID为 {params.schedule_id} 的日程"
-            
-            elif parsed_command.method == "delete":
-                success = self.schedule_manager.delete(parsed_command.schedule_id)
-                if success:
-                    return f"已删除日程（ID: {parsed_command.schedule_id}）"
-                else:
-                    return f"未找到ID为 {parsed_command.schedule_id} 的日程"
-            
-            elif parsed_command.method == "get":
-                schedule = self.schedule_manager.get(parsed_command.schedule_id)
-                if schedule:
-                    return self._format_schedule(schedule)
-                else:
-                    return f"未找到ID为 {parsed_command.schedule_id} 的日程"
-            
-            elif parsed_command.method == "list":
-                params = parsed_command.list_params or {}
-                schedules = self.schedule_manager.list(**params.dict())
-                return self._format_schedule_list(schedules)
-            
-            elif parsed_command.method == "get_current":
-                schedules = self.schedule_manager.get_current()
-                if schedules:
-                    return f"当前进行中的日程：\n{self._format_schedule_list(schedules)}"
-                else:
-                    return "当前没有进行中的日程"
-            
-            elif parsed_command.method == "get_upcoming":
-                hours = parsed_command.hours or 24
-                schedules = self.schedule_manager.get_upcoming(hours)
-                if schedules:
-                    return f"未来{hours}小时内的日程：\n{self._format_schedule_list(schedules)}"
-                else:
-                    return f"未来{hours}小时内没有日程"
-            
-            elif parsed_command.method == "get_schedules_for_date":
-                if not parsed_command.date:
-                    return "错误：需要指定日期"
-                schedules = self.schedule_manager.get_schedules_for_date(parsed_command.date)
-                date_str = parsed_command.date.strftime('%Y-%m-%d')
-                if schedules:
-                    return f"{date_str} 的日程：\n{self._format_schedule_list(schedules)}"
-                else:
-                    return f"{date_str} 没有日程"
-            
-            elif parsed_command.method == "clear_triggered":
-                success = self.schedule_manager.clear_triggered(parsed_command.schedule_id)
-                if success:
-                    return f"已清除日程（ID: {parsed_command.schedule_id}）的触发记录"
-                else:
-                    return f"未找到ID为 {parsed_command.schedule_id} 的日程"
-            
-            elif parsed_command.method == "save":
-                success = self.schedule_manager.save()
-                return "已保存所有日程" if success else "保存失败"
-            
-            elif parsed_command.method == "reload":
-                self.schedule_manager.reload()
-                return "已重新加载日程数据"
-            
-            elif parsed_command.method == "backup":
-                success = self.schedule_manager.backup()
-                return "已创建备份" if success else "备份失败"
-            
-            elif parsed_command.method == "export":
-                data = self.schedule_manager.export()
-                return f"已导出 {len(data.get('schedules', []))} 个日程"
-            
-            elif parsed_command.method == "import_schedules":
-                if not parsed_command.export_data:
-                    return "缺少导入数据"
-                count = self.schedule_manager.import_schedules(
-                    parsed_command.export_data,
-                    merge=parsed_command.merge
-                )
-                return f"已导入 {count} 个日程"
-            
-            else:
-                return f"未知的日程管理方法：{parsed_command.method}"
-                
-        except Exception as e:
-            logger.error(f"处理日程命令时出错：{e}")
-            if self.developer_mode:
-                import traceback
-                print(f"\n[开发者模式] 错误详情:")
-                traceback.print_exc()
-            return f"执行失败：{str(e)}"
-    
-    def _format_schedule(self, schedule: Schedule) -> str:
-        """格式化单个日程"""
-        status = "进行中" if schedule.is_in_progress() else (
-            "已结束" if schedule.has_ended() else "未开始"
-        )
-        progress = schedule.get_progress_percentage()
-        
-        return (
-            f"日程：{schedule.title}\n"
-            f"详情：{schedule.details}\n"
-            f"开始时间：{schedule.start_time.strftime('%Y-%m-%d %H:%M')}\n"
-            f"持续时间：{schedule.duration_minutes}分钟\n"
-            f"状态：{status}（进度：{progress:.1f}%）\n"
-            f"ID：{schedule.id}"
-        )
-    
-    def _format_schedule_list(self, schedules: List[Schedule]) -> str:
-        """格式化日程列表"""
-        if not schedules:
-            return "没有日程"
-        
-        lines = []
-        for i, schedule in enumerate(schedules, 1):
-            status = "进行中" if schedule.is_in_progress() else (
-                "已结束" if schedule.has_ended() else "未开始"
-            )
-            line = (
-                f"{i}. {schedule.title} - "
-                f"{schedule.start_time.strftime('%m-%d %H:%M')} "
-                f"({schedule.duration_minutes}分钟) - {status}"
-            )
-            lines.append(line)
-        
-        return "\n".join(lines)
-    
     def chat(self, message: str) -> str:
         """
         处理用户消息 - 使用灵活的功能调用方式
@@ -530,7 +287,6 @@ class LLMAssistant:
 
 可用命令：
 - 监视仆人活动：[调用功能: stats]
-- 管理仆人日程：[调用功能: schedule]
 
 交流准则：
 - 语气威严冷酷
@@ -578,18 +334,19 @@ class LLMAssistant:
             final_response = self.chat_llm.invoke(final_messages)
             result = final_response.content
             
-        elif "[调用功能: schedule]" in ai_response and self.schedule_manager:
-            if self.developer_mode:
-                print(f"\n[开发者模式] 检测到需要日程功能")
-            # 调用日程功能
-            schedule_result = self.process_schedule_command(message)
-            # 基于日程结果生成最终回复
-            final_messages = decision_messages + [
-                AIMessage(content=f"日程操作结果：\n{schedule_result}"),
-                HumanMessage(content="基于以上操作结果，用自然友好的方式回复用户。")
-            ]
-            final_response = self.chat_llm.invoke(final_messages)
-            result = final_response.content
+        # 日程功能暂时禁用
+        # elif "[调用功能: schedule]" in ai_response and self.schedule_manager:
+        #     if self.developer_mode:
+        #         print(f"\n[开发者模式] 检测到需要日程功能")
+        #     # 调用日程功能
+        #     schedule_result = self.process_schedule_command(message)
+        #     # 基于日程结果生成最终回复
+        #     final_messages = decision_messages + [
+        #         AIMessage(content=f"日程操作结果：\n{schedule_result}"),
+        #         HumanMessage(content="基于以上操作结果，用自然友好的方式回复用户。")
+        #     ]
+        #     final_response = self.chat_llm.invoke(final_messages)
+        #     result = final_response.content
             
         else:
             # 不需要功能，使用AI的原始回复（移除功能标记）
@@ -597,11 +354,12 @@ class LLMAssistant:
             
             # 如果用户似乎需要功能但AI没有识别出来，可以在这里添加提示
             keywords_stats = ["统计", "活动", "时长", "做了什么", "花了多少时间"]
-            keywords_schedule = ["日程", "安排", "会议", "任务", "提醒"]
+            # keywords_schedule = ["日程", "安排", "会议", "任务", "提醒"]  # 日程功能暂时禁用
             
             user_lower = message.lower()
             might_need_stats = any(kw in user_lower for kw in keywords_stats)
-            might_need_schedule = any(kw in user_lower for kw in keywords_schedule)
+            # might_need_schedule = any(kw in user_lower for kw in keywords_schedule)  # 日程功能暂时禁用
+            might_need_schedule = False  # 日程功能暂时禁用
             
             if (might_need_stats or might_need_schedule) and "？" in message:
                 # 可能是在询问功能

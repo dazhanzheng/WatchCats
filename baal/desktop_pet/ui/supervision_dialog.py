@@ -16,116 +16,214 @@ class SupervisionDialog(QDialog):
     """监督模式设置对话框"""
     
     # 信号：当用户确认设置时发出
-    supervision_started = pyqtSignal(str, list)  # goal, tasks
+    supervision_started = pyqtSignal(str, list)  # long_term_goal, short_term_goals
     
     def __init__(self, parent=None, current_goal="", current_tasks=None):
         """初始化对话框
         
         Args:
             parent: 父窗口
-            current_goal: 当前的监督目标
-            current_tasks: 当前的任务列表
+            current_goal: 当前的长期目标
+            current_tasks: 当前的短期目标列表
         """
         super().__init__(parent)
-        self.current_goal = current_goal
-        self.current_tasks = current_tasks or []
+        self.long_term_goal = current_goal
+        self.short_term_goals = current_tasks or []
         self.init_ui()
         
         # 如果有现有设置，加载它们
-        if self.current_goal:
-            self.goal_edit.setText(self.current_goal)
-        for task in self.current_tasks:
-            self.task_list.addItem(task)
+        if self.long_term_goal:
+            self.long_term_edit.setText(self.long_term_goal)
+        for goal in self.short_term_goals:
+            self.short_term_list.addItem(goal)
     
     def init_ui(self):
         """初始化UI"""
-        self.setWindowTitle("监督模式设置")
+        self.setWindowTitle("👁 监督模式设置")
         self.setModal(True)
-        self.setMinimumWidth(500)
-        self.setMinimumHeight(400)
+        self.setMinimumWidth(600)
+        self.setMinimumHeight(500)
+        
+        # 设置对话框样式
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #f5f5f5;
+            }
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #cccccc;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+            }
+            QLabel {
+                color: #333333;
+            }
+            QTextEdit, QLineEdit {
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                padding: 5px;
+                background-color: white;
+            }
+            QListWidget {
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                background-color: white;
+            }
+        """)
         
         layout = QVBoxLayout()
+        layout.setSpacing(15)
         
-        # 说明文字
+        # 标题和说明
+        header_layout = QVBoxLayout()
+        title_label = QLabel("🎯 设定您的目标")
+        title_label.setStyleSheet("""
+            font-size: 18px;
+            font-weight: bold;
+            color: #2c3e50;
+            padding: 10px;
+        """)
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        header_layout.addWidget(title_label)
+        
         intro_label = QLabel(
-            "监督模式会每5分钟检查您的电脑使用情况，\n"
-            "如果发现您偏离了设定的目标，巴利会提醒您。"
+            "监督模式将每5分钟检查您的活动，帮助您保持专注。\n"
+            "巴利会根据您的目标和当前人设提供个性化提醒。"
         )
         intro_label.setWordWrap(True)
-        layout.addWidget(intro_label)
+        intro_label.setStyleSheet("""
+            color: #7f8c8d;
+            padding: 0 20px 10px 20px;
+        """)
+        intro_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        header_layout.addWidget(intro_label)
+        layout.addLayout(header_layout)
         
-        # 目标设置组
-        goal_group = QGroupBox("监督目标")
-        goal_layout = QVBoxLayout()
+        # 长期目标设置组
+        long_term_group = QGroupBox("🏆 长期目标")
+        long_term_layout = QVBoxLayout()
         
-        goal_label = QLabel("请描述您此次使用监督模式的目的：")
-        goal_layout.addWidget(goal_label)
+        long_term_label = QLabel("您的最终目标是什么？（一段话描述）")
+        long_term_layout.addWidget(long_term_label)
         
-        self.goal_edit = QTextEdit()
-        self.goal_edit.setPlaceholderText(
-            "例如：专注完成项目报告，不要分心看视频或社交媒体"
+        self.long_term_edit = QTextEdit()
+        self.long_term_edit.setPlaceholderText(
+            "例如：完成我的毕业论文，保持高效的学习状态，避免被娱乐内容分散注意力"
         )
-        self.goal_edit.setMaximumHeight(80)
-        goal_layout.addWidget(self.goal_edit)
+        self.long_term_edit.setMaximumHeight(80)
+        long_term_layout.addWidget(self.long_term_edit)
         
-        goal_group.setLayout(goal_layout)
-        layout.addWidget(goal_group)
+        long_term_group.setLayout(long_term_layout)
+        layout.addWidget(long_term_group)
         
-        # 任务列表组
-        tasks_group = QGroupBox("预期任务")
-        tasks_layout = QVBoxLayout()
+        # 短期目标列表组
+        short_term_group = QGroupBox("✅ 短期目标")
+        short_term_layout = QVBoxLayout()
         
-        tasks_label = QLabel("您打算做哪些具体的事情？")
-        tasks_layout.addWidget(tasks_label)
+        short_term_label = QLabel("今天要完成的具体任务：")
+        short_term_layout.addWidget(short_term_label)
         
-        # 任务输入
-        task_input_layout = QHBoxLayout()
-        self.task_input = QLineEdit()
-        self.task_input.setPlaceholderText("输入一个任务，然后点击添加")
-        self.task_input.returnPressed.connect(self.add_task)
-        task_input_layout.addWidget(self.task_input)
+        # 短期目标输入
+        goal_input_layout = QHBoxLayout()
+        self.goal_input = QLineEdit()
+        self.goal_input.setPlaceholderText("输入一个短期目标，然后点击添加")
+        self.goal_input.returnPressed.connect(self.add_goal)
+        goal_input_layout.addWidget(self.goal_input)
         
-        self.add_button = QPushButton("添加")
-        self.add_button.clicked.connect(self.add_task)
-        task_input_layout.addWidget(self.add_button)
+        self.add_button = QPushButton("➕ 添加")
+        self.add_button.setStyleSheet("""
+            QPushButton {
+                background-color: #3498db;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 5px 15px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #2980b9;
+            }
+            QPushButton:pressed {
+                background-color: #21618c;
+            }
+        """)
+        self.add_button.clicked.connect(self.add_goal)
+        goal_input_layout.addWidget(self.add_button)
         
-        tasks_layout.addLayout(task_input_layout)
+        short_term_layout.addLayout(goal_input_layout)
         
-        # 任务列表
-        self.task_list = QListWidget()
-        self.task_list.setMaximumHeight(150)
-        tasks_layout.addWidget(self.task_list)
+        # 短期目标列表
+        self.short_term_list = QListWidget()
+        self.short_term_list.setMaximumHeight(120)
+        short_term_layout.addWidget(self.short_term_list)
         
         # 删除按钮
-        self.remove_button = QPushButton("删除选中的任务")
-        self.remove_button.clicked.connect(self.remove_task)
-        tasks_layout.addWidget(self.remove_button)
+        self.remove_button = QPushButton("🗑 删除选中的目标")
+        self.remove_button.setStyleSheet("""
+            QPushButton {
+                background-color: #e74c3c;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 5px 15px;
+            }
+            QPushButton:hover {
+                background-color: #c0392b;
+            }
+        """)
+        self.remove_button.clicked.connect(self.remove_goal)
+        short_term_layout.addWidget(self.remove_button)
         
-        tasks_group.setLayout(tasks_layout)
-        layout.addWidget(tasks_group)
+        short_term_group.setLayout(short_term_layout)
+        layout.addWidget(short_term_group)
         
         # 按钮栏
         button_layout = QHBoxLayout()
         button_layout.addStretch()
         
-        self.cancel_button = QPushButton("取消")
+        self.cancel_button = QPushButton("❌ 取消")
+        self.cancel_button.setStyleSheet("""
+            QPushButton {
+                background-color: #95a5a6;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 8px 20px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #7f8c8d;
+            }
+        """)
         self.cancel_button.clicked.connect(self.reject)
         button_layout.addWidget(self.cancel_button)
         
-        self.start_button = QPushButton("开始监督")
+        self.start_button = QPushButton("🚀 开始监督")
         self.start_button.clicked.connect(self.start_supervision)
         self.start_button.setDefault(True)
         
         # 设置开始按钮样式
         self.start_button.setStyleSheet("""
             QPushButton {
-                background-color: #4CAF50;
+                background-color: #27ae60;
                 color: white;
                 font-weight: bold;
-                padding: 5px 15px;
+                border: none;
+                border-radius: 4px;
+                padding: 8px 30px;
+                font-size: 14px;
             }
             QPushButton:hover {
-                background-color: #45a049;
+                background-color: #229954;
+            }
+            QPushButton:pressed {
+                background-color: #1e7e34;
             }
         """)
         button_layout.addWidget(self.start_button)
@@ -134,43 +232,54 @@ class SupervisionDialog(QDialog):
         
         self.setLayout(layout)
     
+    def add_goal(self):
+        """添加短期目标到列表"""
+        goal = self.goal_input.text().strip()
+        if goal:
+            # 限制短期目标数量
+            if self.short_term_list.count() >= 5:
+                QMessageBox.information(self, "提示", "短期目标最多5个，请保持简洁")
+                return
+            self.short_term_list.addItem(goal)
+            self.goal_input.clear()
+    
+    def remove_goal(self):
+        """从列表中删除选中的短期目标"""
+        current_item = self.short_term_list.currentItem()
+        if current_item:
+            self.short_term_list.takeItem(self.short_term_list.row(current_item))
+    
+    # 兼容旧方法名
     def add_task(self):
-        """添加任务到列表"""
-        task = self.task_input.text().strip()
-        if task:
-            self.task_list.addItem(task)
-            self.task_input.clear()
+        self.add_goal()
     
     def remove_task(self):
-        """从列表中删除选中的任务"""
-        current_item = self.task_list.currentItem()
-        if current_item:
-            self.task_list.takeItem(self.task_list.row(current_item))
+        self.remove_goal()
     
     def start_supervision(self):
         """开始监督"""
-        goal = self.goal_edit.toPlainText().strip()
+        long_term_goal = self.long_term_edit.toPlainText().strip()
         
-        if not goal:
-            QMessageBox.warning(self, "提示", "请输入监督目标")
+        if not long_term_goal:
+            QMessageBox.warning(self, "提示", "请输入长期目标")
             return
         
-        # 获取所有任务
-        tasks = []
-        for i in range(self.task_list.count()):
-            tasks.append(self.task_list.item(i).text())
+        # 获取所有短期目标
+        short_term_goals = []
+        for i in range(self.short_term_list.count()):
+            short_term_goals.append(self.short_term_list.item(i).text())
         
-        if not tasks:
+        if not short_term_goals:
             reply = QMessageBox.question(
                 self, "确认",
-                "您没有添加具体任务，确定要继续吗？",
+                "您没有添加短期目标，建议添加一些具体任务。\n确定要继续吗？",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
             if reply != QMessageBox.StandardButton.Yes:
                 return
         
         # 发出信号并关闭对话框
-        self.supervision_started.emit(goal, tasks)
+        self.supervision_started.emit(long_term_goal, short_term_goals)
         self.accept()
 
 
@@ -223,22 +332,32 @@ class SupervisionStatusWidget(QGroupBox):
         self.setLayout(layout)
         self.setMaximumHeight(150)
     
-    def update_status(self, is_active: bool, goal: str = "", tasks: list = None):
+    def update_status(self, is_active: bool, long_term_goal: str = "", short_term_goals: list = None):
         """更新状态显示
         
         Args:
             is_active: 是否激活
-            goal: 监督目标
-            tasks: 任务列表
+            long_term_goal: 长期目标
+            short_term_goals: 短期目标列表
         """
         if is_active:
-            self.status_label.setText("监督中")
-            self.status_label.setStyleSheet("color: green;")
-            self.goal_label.setText(f"目标: {goal[:100]}...")  # 限制显示长度
+            self.status_label.setText("✅ 监督中")
+            self.status_label.setStyleSheet("color: green; font-weight: bold;")
+            
+            # 显示长期目标
+            display_text = f"长期目标: {long_term_goal[:50]}"
+            if len(long_term_goal) > 50:
+                display_text += "..."
+            
+            # 显示短期目标数量
+            if short_term_goals:
+                display_text += f"\n短期目标: {len(short_term_goals)}项"
+            
+            self.goal_label.setText(display_text)
             self.modify_button.setEnabled(True)
             self.stop_button.setEnabled(True)
         else:
-            self.status_label.setText("未激活")
+            self.status_label.setText("⏸ 未激活")
             self.status_label.setStyleSheet("color: gray;")
             self.goal_label.setText("")
             self.modify_button.setEnabled(False)

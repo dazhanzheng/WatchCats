@@ -345,4 +345,63 @@ class StatsProcessor:
         
     def get_stats_5m(self) -> str:
         """获取5分钟详细统计数据"""
-        return self.get_detailed_stats(5/60) 
+        return self.get_detailed_stats(5/60)
+    
+    def get_afk_time_5m(self) -> Dict[str, Any]:
+        """获取过去5分钟的AFK时间
+        
+        Returns:
+            包含AFK秒数的字典
+        """
+        try:
+            afk_bucket = self._get_afk_bucket()
+            if not afk_bucket:
+                return {'afk_seconds': 0}
+            
+            end_time = datetime.now(timezone.utc)
+            start_time = end_time - timedelta(minutes=5)
+            
+            events = self.client.get_events(
+                afk_bucket,
+                start=start_time,
+                end=end_time
+            )
+            
+            # 计算AFK时间
+            afk_seconds = 0
+            for event in events:
+                if event.data.get('status') == 'afk':
+                    afk_seconds += event.duration.total_seconds()
+            
+            return {'afk_seconds': afk_seconds}
+        except Exception as e:
+            self.logger.error(f"Failed to get AFK time: {e}")
+            return {'afk_seconds': 0}
+    
+    def get_stats_today(self) -> str:
+        """获取今日统计数据（从凌晨4点开始）
+        
+        Returns:
+            今日活动的统计摘要
+        """
+        try:
+            now = datetime.now()
+            # 确定今日的开始时间（凌晨4点）
+            if now.hour < 4:
+                # 如果现在是凌晨0-4点，算作昨天
+                start_date = now.date() - timedelta(days=1)
+            else:
+                start_date = now.date()
+            
+            start_time = datetime.combine(start_date, datetime.min.time().replace(hour=4))
+            start_time = start_time.replace(tzinfo=timezone.utc)
+            end_time = datetime.now(timezone.utc)
+            
+            # 计算时长（小时）
+            hours = (end_time - start_time).total_seconds() / 3600
+            
+            # 使用现有的聚合统计方法
+            return self.get_aggregated_stats(hours / 24)  # 转换为天数
+        except Exception as e:
+            self.logger.error(f"Failed to get today stats: {e}")
+            return "无法获取今日统计数据" 

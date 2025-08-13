@@ -13,7 +13,6 @@ from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from ...llm_assistant import LLMAssistant
 from ...llm_assistant.binary_intent_classifier import BinaryIntentClassifier
 from ...aw_stats import StatsProcessor
-from ...scheduler import ScheduleManager
 from .logger_config import get_logger, log_performance, log_api_call
 from .persona_manager import PersonaManager, PersonaLevel
 
@@ -35,7 +34,7 @@ class LLMHandler:
         self.logger.info(f"Initializing LLMHandler with model: {model}")
         
         self.base_url = base_url
-        self.api_key = api_key  # Store the actual key for API use
+        self.api_key = api_key
         self.model = model
         
         # 初始化人设管理器
@@ -63,7 +62,6 @@ class LLMHandler:
                 parse_temperature=0.1,
                 chat_temperature=0.7,
                 stats_processor=StatsProcessor(),
-                schedule_manager=ScheduleManager(),  # 添加日程管理功能
                 streaming=False  # LLMAssistant 内部流式输出不兼容我们的实现
             )
             self.logger.info("LLMAssistant initialized successfully")
@@ -273,19 +271,10 @@ class LLMHandler:
         
         async def get_schedule_safe():
             start = time.time()
-            try:
-                result = await asyncio.get_event_loop().run_in_executor(
-                    None, 
-                    self.assistant.process_schedule_command, 
-                    user_input
-                )
-                end = time.time()
-                timings['schedule'] = {'start': start, 'end': end, 'duration': end - start}
-                return result
-            except Exception as e:
-                end = time.time()
-                timings['schedule'] = {'start': start, 'end': end, 'duration': end - start, 'error': str(e)}
-                return f"日程查询失败: {str(e)}"
+            result = ""
+            end = time.time()
+            timings['schedule'] = {'start': start, 'end': end, 'duration': end - start}
+            return result
         
         async def get_intent_safe():
             start = time.time()
@@ -345,6 +334,7 @@ class LLMHandler:
         # 通知开始思考
         self._notify_status("thinking")
         
+        
         # 创建并行任务
         # 意图分类任务
         async def get_intent():
@@ -358,7 +348,7 @@ class LLMHandler:
                 # 解析二进制结果
                 is_chat, needs_stats, needs_schedule = BinaryIntentClassifier.parse_binary(binary_str)
                 
-                self.logger.info(f"Intent classification: {binary_str} -> chat={is_chat}, stats={needs_stats}, schedule={needs_schedule}")
+                self.logger.info(f"Intent classification: {binary_str} -> chat={is_chat}, stats={needs_stats}")
                 
                 return {
                     'binary': binary_str,
@@ -396,17 +386,6 @@ class LLMHandler:
             except Exception as e:
                 return f"统计查询失败: {str(e)}"
         
-        # 日程查询任务
-        async def get_schedule():
-            try:
-                result = await asyncio.get_event_loop().run_in_executor(
-                    None, 
-                    self.assistant.process_schedule_command, 
-                    user_input
-                )
-                return result
-            except Exception as e:
-                return f"日程查询失败: {str(e)}"
         
         # 首先启动意图分类和聊天任务（这两个总是需要的）
         intent_task = asyncio.create_task(get_intent())
@@ -417,13 +396,9 @@ class LLMHandler:
         
         # 根据意图决定是否启动工具任务
         stats_task = None
-        schedule_task = None
         
         if intent_decision['needs_stats']:
             stats_task = asyncio.create_task(get_stats())
-        
-        if intent_decision['needs_schedule']:
-            schedule_task = asyncio.create_task(get_schedule())
         
         # 根据意图决定策略
         final_response = ""
@@ -446,9 +421,6 @@ class LLMHandler:
             
             if intent_decision['needs_stats'] and stats_task:
                 tasks_to_wait.append(('stats', stats_task))
-            
-            if intent_decision['needs_schedule'] and schedule_task:
-                tasks_to_wait.append(('schedule', schedule_task))
             
             # 等待需要的工具完成
             for task_name, task in tasks_to_wait:
@@ -491,8 +463,6 @@ class LLMHandler:
         tasks_to_wait_final = [chat_task]
         if stats_task:
             tasks_to_wait_final.append(stats_task)
-        if schedule_task:
-            tasks_to_wait_final.append(schedule_task)
         
         await asyncio.gather(*tasks_to_wait_final, return_exceptions=True)
         

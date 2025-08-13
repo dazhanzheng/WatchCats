@@ -36,8 +36,8 @@ class SupervisionMode(QObject):
         self._init_llm_assistant()
         
         self.is_active = False
-        self.supervision_goal = ""  # 监督目标
-        self.supervision_tasks = []  # 预期要做的事情列表
+        self.long_term_goal = ""  # 长期目标
+        self.short_term_goals = []  # 短期目标列表
         self.check_thread: Optional[threading.Thread] = None
         self.check_interval = 300  # 检查间隔（5分钟）
         self.last_check_time = None
@@ -68,8 +68,13 @@ class SupervisionMode(QObject):
             if config_path.exists():
                 with open(config_path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                    self.supervision_goal = data.get('goal', '')
-                    self.supervision_tasks = data.get('tasks', [])
+                    self.long_term_goal = data.get('long_term_goal', '')
+                    self.short_term_goals = data.get('short_term_goals', [])
+                    # 兼容旧版本数据
+                    if 'goal' in data and not self.long_term_goal:
+                        self.long_term_goal = data['goal']
+                    if 'tasks' in data and not self.short_term_goals:
+                        self.short_term_goals = data['tasks']
                     # 不自动恢复激活状态，需要用户手动开启
         except Exception as e:
             print(f"加载监督设置失败: {e}")
@@ -79,8 +84,8 @@ class SupervisionMode(QObject):
         try:
             config_path = self.config_manager.config_dir / 'supervision.json'
             data = {
-                'goal': self.supervision_goal,
-                'tasks': self.supervision_tasks,
+                'long_term_goal': self.long_term_goal,
+                'short_term_goals': self.short_term_goals,
                 'updated_at': datetime.now().isoformat()
             }
             with open(config_path, 'w', encoding='utf-8') as f:
@@ -88,12 +93,12 @@ class SupervisionMode(QObject):
         except Exception as e:
             print(f"保存监督设置失败: {e}")
     
-    def start_supervision(self, goal: str, tasks: list):
+    def start_supervision(self, long_term_goal: str = None, short_term_goals: list = None):
         """启动监督模式
         
         Args:
-            goal: 监督目标描述
-            tasks: 预期要做的事情列表
+            long_term_goal: 长期目标描述（可选，不提供则使用已保存的）
+            short_term_goals: 短期目标列表（可选，不提供则使用已保存的）
         """
         # 检查是否已配置LLM
         if not self.llm_assistant:
@@ -105,8 +110,11 @@ class SupervisionMode(QObject):
                 print("错误：监督模式需要配置API密钥才能正常工作")
                 return False  # 返回False表示启动失败
         
-        self.supervision_goal = goal
-        self.supervision_tasks = tasks
+        # 如果提供了新的目标，更新它们
+        if long_term_goal is not None:
+            self.long_term_goal = long_term_goal
+        if short_term_goals is not None:
+            self.short_term_goals = short_term_goals
         self.is_active = True
         self.last_check_time = datetime.now()
         
@@ -119,7 +127,7 @@ class SupervisionMode(QObject):
             self.check_thread.start()
         
         self.mode_changed.emit(True)
-        print(f"监督模式已启动 - 目标: {goal}")
+        print(f"监督模式已启动 - 长期目标: {self.long_term_goal}")
         return True
     
     def stop_supervision(self):
@@ -145,18 +153,69 @@ class SupervisionMode(QObject):
         """检查用户活动是否符合目标"""
         # 获取过去5分钟的活动数据
         current_time = datetime.now()
-        stats = self._get_recent_activity_stats()
+        
+        # 首先检查AFK状态
+        if self._is_user_afk():
+            print("用户处于AFK状态，跳过监督检查")
+            self.last_check_time = current_time
+            return
+        
+        # 获取多时段的活动统计
+        stats = self._get_comprehensive_activity_stats()
         
         if stats:
-            # 使用LLM判断是否偏离目标
-            is_on_track = self._evaluate_activity(stats)
+            # 使用增强的LLM评估
+            evaluation_result = self._evaluate_activity_enhanced(stats)
             
-            if not is_on_track:
-                # 生成提醒内容
-                reminder_context = self._create_reminder_context(stats)
+            if evaluation_result and evaluation_result.get('should_remind'):
+                # 生成增强的提醒内容
+                reminder_context = self._create_enhanced_reminder_context(stats, evaluation_result)
                 self.reminder_needed.emit(reminder_context)
         
         self.last_check_time = current_time
+    
+    def _is_user_afk(self) -> bool:
+        """检查用户是否处于AFK状态
+        
+        Returns:
+            True如果用户在过去5分钟完全AFK，False否则
+        """
+        try:
+            with self.stats_processor as sp:
+                # 获取AFK时长（空闲时间）
+                afk_stats = sp.get_afk_time_5m()
+                # 如果AFK时间超过4分钟（240秒），认为用户完全AFK
+                return afk_stats and afk_stats.get('afk_seconds', 0) > 240
+        except Exception as e:
+            print(f"检查AFK状态失败: {e}")
+            return False
+    
+    def _get_comprehensive_activity_stats(self) -> Dict[str, Any]:
+        """获取多时段的综合活动统计
+        
+        Returns:
+            包含5分钟、2小时和当日活动统计的字典
+        """
+        try:
+            with self.stats_processor as sp:
+                # 5分钟数据
+                stats_5m = sp.get_stats_5m()
+                
+                # 2小时数据
+                stats_2h = sp.get_stats_2h()
+                
+                # 当日数据（从凌晨4点开始）
+                stats_today = sp.get_stats_today()
+                
+                return {
+                    'stats_5m': stats_5m,
+                    'stats_2h': stats_2h,
+                    'stats_today': stats_today,
+                    'timestamp': datetime.now().isoformat()
+                }
+        except Exception as e:
+            print(f"获取综合活动统计失败: {e}")
+            return {}
     
     def _get_recent_activity_stats(self) -> Dict[str, Any]:
         """获取最近的活动统计
@@ -199,6 +258,79 @@ class SupervisionMode(QObject):
             print(f"获取活动统计失败: {e}")
             return {}
     
+    def _evaluate_activity_enhanced(self, stats: Dict[str, Any]) -> Dict[str, Any]:
+        """增强的活动评估，包括提醒建议
+        
+        Args:
+            stats: 综合活动统计数据
+            
+        Returns:
+            包含评估结果和提醒建议的字典
+        """
+        # 必须有LLM助手才能进行评估
+        if not self.llm_assistant:
+            print("警告：监督模式需要配置LLM才能正常工作")
+            return None
+        
+        try:
+            # 获取当前人设
+            from .core.persona_manager import PersonaManager
+            persona_manager = PersonaManager()
+            current_persona = persona_manager.get_current_persona()
+            
+            # 构建增强的评估提示
+            prompt = f"""你是巴利（Baal），一个监督用户生产力的桌面宠物助手。
+当前人设模式：{current_persona['name']}
+人设特点：{current_persona['description']}
+
+用户设定的目标：
+长期目标：{self.long_term_goal if self.long_term_goal else '未设定'}
+短期目标：{', '.join(self.short_term_goals) if self.short_term_goals else '未设定'}
+
+用户的电脑使用情况：
+
+过去5分钟：
+{stats.get('stats_5m', '无数据')[:500]}
+
+过去2小时：
+{stats.get('stats_2h', '无数据')[:500]}
+
+今日总体（从凌晨4点开始）：
+{stats.get('stats_today', '无数据')[:500]}
+
+请分析用户的活动是否符合其设定的目标，并按照以下JSON格式回答：
+{{
+    "should_remind": true或false（是否需要提醒用户）,
+    "deviation_level": "严重"或"中度"或"轻微"（偏离程度）,
+    "reminder_message": "根据人设特点的提醒内容，使用中文",
+    "analysis": "简短的分析说明"
+}}
+
+注意：
+1. 如果用户正在做与目标相关的事情，不要提醒
+2. 只有当用户明显偏离目标时才提醒
+3. 提醒内容必须符合当前人设的语言风格
+"""
+            
+            # 使用LLM评估
+            response = self.llm_assistant.ask(prompt)
+            
+            # 解析JSON响应
+            import json
+            # 尝试提取JSON部分
+            if '{' in response and '}' in response:
+                json_start = response.index('{')
+                json_end = response.rindex('}') + 1
+                json_str = response[json_start:json_end]
+                return json.loads(json_str)
+            else:
+                # 如果无法解析JSON，默认不提醒
+                return {'should_remind': False}
+            
+        except Exception as e:
+            print(f"增强评估活动时出错: {e}")
+            return None
+    
     def _evaluate_activity(self, stats: Dict[str, Any]) -> bool:
         """评估活动是否符合目标
         
@@ -221,8 +353,8 @@ class SupervisionMode(QObject):
             
             prompt = f"""请判断用户的电脑使用情况是否符合其设定的目标。
 
-用户设定的监督目标：{self.supervision_goal}
-预期要做的事情：{', '.join(self.supervision_tasks)}
+用户的长期目标：{self.long_term_goal}
+用户的短期目标：{', '.join(self.short_term_goals) if self.short_term_goals else '未设定'}
 
 过去5分钟的使用情况：
 - 总使用时间：{stats.get('total_time', 0)}秒
@@ -248,6 +380,27 @@ class SupervisionMode(QObject):
             # 出错时默认不打扰用户
             return True
     
+    def _create_enhanced_reminder_context(self, stats: Dict[str, Any], evaluation: Dict[str, Any]) -> Dict[str, Any]:
+        """创建增强的提醒上下文
+        
+        Args:
+            stats: 活动统计数据
+            evaluation: LLM评估结果
+            
+        Returns:
+            增强的提醒上下文字典
+        """
+        return {
+            'type': 'supervision_reminder',
+            'long_term_goal': self.long_term_goal,
+            'short_term_goals': self.short_term_goals,
+            'activity_stats': stats,
+            'evaluation': evaluation,
+            'reminder_message': evaluation.get('reminder_message', '你似乎偏离了目标，请回到正轨。'),
+            'deviation_level': evaluation.get('deviation_level', '未知'),
+            'timestamp': datetime.now().isoformat()
+        }
+    
     def _create_reminder_context(self, stats: Dict[str, Any]) -> Dict[str, Any]:
         """创建提醒上下文
         
@@ -259,8 +412,8 @@ class SupervisionMode(QObject):
         """
         return {
             'type': 'supervision_reminder',
-            'goal': self.supervision_goal,
-            'tasks': self.supervision_tasks,
+            'long_term_goal': self.long_term_goal,
+            'short_term_goals': self.short_term_goals,
             'activity_stats': stats,
             'timestamp': datetime.now().isoformat()
         }
@@ -269,14 +422,14 @@ class SupervisionMode(QObject):
         """获取监督模式状态"""
         return {
             'is_active': self.is_active,
-            'goal': self.supervision_goal,
-            'tasks': self.supervision_tasks,
+            'long_term_goal': self.long_term_goal,
+            'short_term_goals': self.short_term_goals,
             'last_check': self.last_check_time.isoformat() if self.last_check_time else None
         }
     
-    def update_goal(self, goal: str, tasks: list):
+    def update_goals(self, long_term_goal: str, short_term_goals: list):
         """更新监督目标（不重启监督）"""
-        self.supervision_goal = goal
-        self.supervision_tasks = tasks
+        self.long_term_goal = long_term_goal
+        self.short_term_goals = short_term_goals
         self._save_supervision_settings()
-        print(f"监督目标已更新: {goal}")
+        print(f"监督目标已更新: {long_term_goal}")

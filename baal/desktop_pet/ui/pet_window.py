@@ -77,15 +77,11 @@ class DraggableButton(QPushButton):
 from .chat_bubble import ChatBubble
 from .settings_dialog import SettingsDialog
 from .supervision_dialog import SupervisionDialog, SupervisionStatusWidget
-from .goals_dialog import GoalsDialog
-from .calendar_dialog_modern import ModernCalendarDialog
 from ..core import ConfigManager, LLMHandler
 from ..core.persona_manager import PersonaLevel
 from ..core.emotion_manager import EmotionManager
 from ..core.logger_config import get_logger, log_performance, log_ui_event
 from ..supervision_mode import SupervisionMode
-from ...scheduler.schedule_trigger import ScheduleTriggerManager
-from ...scheduler.manager import ScheduleManager
 
 
 class AsyncWorker(QThread):
@@ -240,8 +236,6 @@ class PetWindow(QWidget):
         # 初始化新功能组件
         try:
             self.supervision_mode = SupervisionMode()
-            self.schedule_manager = ScheduleManager()
-            self.schedule_trigger = ScheduleTriggerManager(self.schedule_manager)
             self.logger.debug("Advanced features initialized")
         except Exception as e:
             self.logger.error(f"Failed to initialize advanced features: {e}", exc_info=True)
@@ -249,7 +243,7 @@ class PetWindow(QWidget):
         
         # 连接信号
         self.supervision_mode.reminder_needed.connect(self._on_supervision_reminder)
-        self.schedule_trigger.schedule_triggered.connect(self._on_schedule_triggered)
+        self.supervision_mode.mode_changed.connect(self._on_supervision_mode_changed)
         
         # 初始化UI
         self._init_ui()
@@ -257,8 +251,6 @@ class PetWindow(QWidget):
         # 初始化系统托盘
         self._init_tray()
         
-        # 启动日程触发监控
-        self.schedule_trigger.start()
         
         # 连接总结状态信号
         self.summary_status_signal.connect(self._handle_summary_status)
@@ -335,6 +327,14 @@ class PetWindow(QWidget):
         # 确保设置按钮在最上层
         self.settings_btn.raise_()
         
+        # 创建监督模式开关按钮（可拖动）
+        self.supervision_btn = DraggableButton("👁", self)
+        self._update_supervision_button_style()
+        self.supervision_btn.clicked.connect(self._quick_toggle_supervision)
+        self.supervision_btn.setToolTip("点击开关监督模式\n长按打开设置")
+        # 确保监督按钮在最上层
+        self.supervision_btn.raise_()
+        
         # 不再需要输入框，已移至气泡窗口
         # self.input_field = QLineEdit(self)
         # self.input_field.hide()
@@ -344,8 +344,14 @@ class PetWindow(QWidget):
         self.settings_btn.move(default_pos)
         self.settings_btn.relative_pos = default_pos
         
-        # 初始隐藏设置按钮
+        # 布局监督模式按钮（在设置按钮左边）
+        supervision_pos = QPoint(self.width() - 75, self.height() - 40)
+        self.supervision_btn.move(supervision_pos)
+        self.supervision_btn.relative_pos = supervision_pos
+        
+        # 初始隐藏按钮
         self.settings_btn.setVisible(False)
+        self.supervision_btn.setVisible(False)
         self.settings_btn.setStyleSheet(self.settings_btn.styleSheet() + """
             QPushButton {
                 opacity: 0.8;
@@ -666,20 +672,22 @@ class PetWindow(QWidget):
     def enterEvent(self, event):
         """鼠标进入事件"""
         super().enterEvent(event)
-        # 显示设置按钮
+        # 显示设置按钮和监督按钮
         self.settings_btn.setVisible(True)
+        self.supervision_btn.setVisible(True)
     
     def leaveEvent(self, event):
         """鼠标离开事件"""
         super().leaveEvent(event)
-        # 延迟隐藏设置按钮（给用户时间移动到按钮上）
-        QTimer.singleShot(500, self._check_hide_settings_btn)
+        # 延迟隐藏按钮（给用户时间移动到按钮上）
+        QTimer.singleShot(500, self._check_hide_buttons)
     
-    def _check_hide_settings_btn(self):
-        """检查是否需要隐藏设置按钮"""
-        # 如果鼠标不在窗口内且不在设置按钮内，则隐藏
-        if not self.underMouse() and not self.settings_btn.underMouse():
+    def _check_hide_buttons(self):
+        """检查是否需要隐藏按钮"""
+        # 如果鼠标不在窗口内且不在按钮内，则隐藏
+        if not self.underMouse() and not self.settings_btn.underMouse() and not self.supervision_btn.underMouse():
             self.settings_btn.setVisible(False)
+            self.supervision_btn.setVisible(False)
     
     @log_ui_event("mouse_press")
     def mousePressEvent(self, event):
@@ -1146,14 +1154,6 @@ class PetWindow(QWidget):
         supervision_action = menu.addAction(supervision_text)
         supervision_action.triggered.connect(self._toggle_supervision_mode)
         
-        # 目标管理
-        goals_action = menu.addAction("目标管理")
-        goals_action.triggered.connect(self._show_goals_dialog)
-        
-        # 日程管理
-        schedule_action = menu.addAction("日程管理")
-        schedule_action.triggered.connect(self._show_schedule_dialog)
-        
         menu.addSeparator()
         
         # 始终置顶
@@ -1194,6 +1194,82 @@ class PetWindow(QWidget):
                          QSystemTrayIcon.ActivationReason.Trigger):
                 self._toggle_visibility()
     
+    def _update_supervision_button_style(self):
+        """更新监督模式按钮的样式"""
+        if self.supervision_mode.is_active:
+            # 激活状态 - 绿色背景
+            self.supervision_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: rgba(76, 175, 80, 200);
+                    border: 2px solid #4CAF50;
+                    border-radius: 15px;
+                    width: 30px;
+                    height: 30px;
+                    font-size: 16px;
+                    color: white;
+                }
+                QPushButton:hover {
+                    background-color: rgba(76, 175, 80, 255);
+                    border: 2px solid #45a049;
+                }
+                QPushButton:pressed {
+                    background-color: rgba(69, 160, 73, 255);
+                }
+            """)
+            self.supervision_btn.setToolTip("监督模式已开启\n点击关闭")
+        else:
+            # 未激活状态 - 白色背景
+            self.supervision_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: rgba(255, 255, 255, 200);
+                    border: 1px solid #ccc;
+                    border-radius: 15px;
+                    width: 30px;
+                    height: 30px;
+                    font-size: 16px;
+                }
+                QPushButton:hover {
+                    background-color: rgba(255, 255, 255, 255);
+                    border: 1px solid #999;
+                }
+                QPushButton:pressed {
+                    background-color: rgba(240, 240, 240, 255);
+                }
+            """)
+            self.supervision_btn.setToolTip("监督模式未开启\n点击开启")
+    
+    def _quick_toggle_supervision(self):
+        """快速切换监督模式开关"""
+        if self.supervision_mode.is_active:
+            # 直接关闭监督模式
+            self.supervision_mode.stop_supervision()
+            self.chat_bubble.show_message("监督模式已关闭。")
+            self._update_supervision_button_style()
+        else:
+            # 检查是否已有保存的目标
+            if self.supervision_mode.long_term_goal or self.supervision_mode.short_term_goals:
+                # 使用已保存的目标直接启动
+                success = self.supervision_mode.start_supervision()
+                if success:
+                    self.chat_bubble.show_message("监督模式已启动。")
+                    self._update_supervision_button_style()
+                else:
+                    # API未配置，提示用户
+                    self._prompt_api_config()
+            else:
+                # 没有保存的目标，打开设置对话框
+                self._show_supervision_dialog()
+    
+    def _show_supervision_dialog(self):
+        """显示监督模式设置对话框"""
+        dialog = SupervisionDialog(
+            self,
+            current_goal=self.supervision_mode.long_term_goal,
+            current_tasks=self.supervision_mode.short_term_goals
+        )
+        dialog.supervision_started.connect(self._start_supervision)
+        dialog.exec()
+    
     def _toggle_supervision_mode(self):
         """切换监督模式"""
         if self.supervision_mode.is_active:
@@ -1204,21 +1280,22 @@ class PetWindow(QWidget):
             # 显示监督设置对话框
             dialog = SupervisionDialog(
                 self,
-                current_goal=self.supervision_mode.supervision_goal,
-                current_tasks=self.supervision_mode.supervision_tasks
+                current_goal=self.supervision_mode.long_term_goal,
+                current_tasks=self.supervision_mode.short_term_goals
             )
             dialog.supervision_started.connect(self._start_supervision)
             dialog.exec()
     
-    def _start_supervision(self, goal: str, tasks: list):
+    def _start_supervision(self, long_term_goal: str, short_term_goals: list):
         """启动监督模式"""
         # 保存目标和任务，以便配置完成后使用
-        self._pending_supervision_goal = goal
-        self._pending_supervision_tasks = tasks
+        self._pending_supervision_goal = long_term_goal
+        self._pending_supervision_tasks = short_term_goals
         
-        success = self.supervision_mode.start_supervision(goal, tasks)
+        success = self.supervision_mode.start_supervision(long_term_goal, short_term_goals)
         if success:
             self.chat_bubble.show_message(f"监督模式已启动。本座会盯着你的，别想偷懒。")
+            self._update_supervision_button_style()
         else:
             # 监督模式启动失败，提示用户配置API
             self.chat_bubble.show_message("监督模式需要配置API密钥。即将打开设置...")
@@ -1255,36 +1332,9 @@ class PetWindow(QWidget):
                 delattr(self, '_pending_supervision_goal')
                 delattr(self, '_pending_supervision_tasks')
     
-    def _show_goals_dialog(self):
-        """显示目标管理对话框"""
-        dialog = GoalsDialog(self)
-        dialog.exec()
-    
-    def _show_schedule_dialog(self):
-        """显示日程管理对话框"""
-        try:
-            # 创建现代化日历对话框
-            dialog = ModernCalendarDialog(self.schedule_manager, self)
-            
-            # 连接信号，当日程变化时刷新触发器
-            dialog.schedule_changed.connect(self._on_schedule_changed)
-            
-            # 显示对话框
-            dialog.exec()
-        except Exception as e:
-            print(f"显示日程对话框失败: {e}")
-            import traceback
-            traceback.print_exc()
-            self.chat_bubble.show_message(f"打开日程管理失败: {str(e)}")
-    
-    def _on_schedule_changed(self):
-        """处理日程变化事件"""
-        # 重新加载触发器
-        if hasattr(self, 'schedule_trigger_manager'):
-            self.schedule_trigger_manager.reload_schedules()
-        
-        # 可选：显示提示
-        self.chat_bubble.show_message("日程已更新。", duration=2000)
+    def _on_supervision_mode_changed(self, is_active: bool):
+        """监督模式状态变更处理"""
+        self._update_supervision_button_style()
     
     def _on_supervision_reminder(self, context: dict):
         """处理监督模式提醒"""
@@ -1294,67 +1344,34 @@ class PetWindow(QWidget):
             self.raise_()
             self.activateWindow()
         
-        # 显示气泡
+        # 确保气泡显示并更新位置
         if not self.chat_bubble.isVisible():
             self.chat_bubble.show()
-            self.chat_bubble.raise_()
+        self.chat_bubble.raise_()
+        self.chat_bubble.activateWindow()
+        self._update_bubble_position()
         
-        # 生成提醒消息
-        goal = context.get('goal', '')
-        tasks = context.get('tasks', [])
-        stats = context.get('activity_stats', {})
-        
-        # 构建提醒消息
-        apps = ', '.join([app.get('name', '') for app in stats.get('top_applications', [])])
-        
-        message = f"喂，人类！你说好要「{goal}」的，现在却在{apps}上浪费时间？\n"
-        if tasks:
-            message += f"你不是要做{tasks[0]}吗？赶紧回到正轨！"
+        # 获取提醒消息（由LLM生成的个性化消息）
+        reminder_message = context.get('reminder_message')
+        if reminder_message:
+            # 使用LLM生成的消息
+            message = reminder_message
         else:
-            message += "别以为本座没看见，赶紧专心工作！"
+            # 后备消息（如果LLM评估失败）
+            long_term_goal = context.get('long_term_goal', '')
+            short_term_goals = context.get('short_term_goals', [])
+            
+            message = f"喂，人类！你说好要「{long_term_goal}」的，现在在做什么？\n"
+            if short_term_goals:
+                message += f"你不是要{short_term_goals[0]}吗？赶紧回到正轨！"
+            else:
+                message += "别以为本座没看见，赶紧专心工作！"
         
-        self.chat_bubble.show_message(message, duration=10000)
-    
-    def _on_schedule_triggered(self, trigger_info: dict):
-        """处理日程触发"""
-        # 确保窗口显示
-        if not self.isVisible():
-            self.show()
-            self.raise_()
-            self.activateWindow()
+        # 根据偏离程度设置显示时长
+        deviation_level = context.get('deviation_level', '中度')
+        duration = 15000 if deviation_level == '严重' else 10000
         
-        # 显示气泡
-        if not self.chat_bubble.isVisible():
-            self.chat_bubble.show()
-            self.chat_bubble.raise_()
-        
-        # 获取上下文信息
-        context = trigger_info.get('context', {})
-        schedule_info = context.get('schedule_info', {})
-        goals = context.get('goals', '')
-        activity_24h = context.get('activity_24h')
-        
-        # 构建触发消息
-        title = schedule_info.get('title', '')
-        details = schedule_info.get('details', '')
-        progress = schedule_info.get('progress_percentage', 0)
-        
-        # 根据进度生成不同的消息
-        if progress < 50:
-            message = f"时间到了！该开始「{title}」了。\n{details}\n"
-            message += "别磨蹭，本座会监督你的。"
-        elif progress < 100:
-            message = f"「{title}」已经进行到{progress:.0f}%了。\n"
-            message += "继续加油，别让本座失望。"
-        else:
-            message = f"「{title}」应该结束了。\n"
-            message += "完成了吗？如果没有，你最好有个好理由。"
-        
-        # 如果有目标信息，添加提醒
-        if goals and goals != "暂无设定目标":
-            message += f"\n\n记住你的目标：\n{goals[:200]}"
-        
-        self.chat_bubble.show_message(message, duration=15000)
+        self.chat_bubble.show_message(message, duration=duration)
     
     def showEvent(self, event):
         """显示事件"""
@@ -1373,4 +1390,4 @@ class PetWindow(QWidget):
         """关闭事件"""
         # 隐藏到托盘而不是退出
         event.ignore()
-        self._hide_to_tray() 
+        self._hide_to_tray()
