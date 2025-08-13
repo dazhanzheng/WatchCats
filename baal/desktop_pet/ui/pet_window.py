@@ -1016,6 +1016,9 @@ class PetWindow(QWidget):
             # macOS 特殊处理：使用更高的窗口级别
             if always_on_top and sys.platform == 'darwin':
                 self._set_macos_window_level()
+            # Windows 特殊处理：使用Windows API确保置顶
+            elif always_on_top and sys.platform == 'win32':
+                self._set_windows_topmost()
     
     def _update_chat_bubble_flags(self, always_on_top):
         """更新气泡窗口的置顶状态"""
@@ -1075,6 +1078,49 @@ class PetWindow(QWidget):
             
         except Exception as e:
             print(f"[WARNING] 无法设置 macOS 窗口级别: {e}")
+    
+    def _set_windows_topmost(self):
+        """使用Windows API设置窗口为最顶层"""
+        try:
+            import ctypes
+            from ctypes import wintypes
+            
+            # Windows API常量
+            HWND_TOPMOST = -1
+            HWND_NOTOPMOST = -2
+            SWP_NOMOVE = 0x0002
+            SWP_NOSIZE = 0x0001
+            SWP_NOACTIVATE = 0x0010
+            SWP_SHOWWINDOW = 0x0040
+            
+            # 获取窗口句柄
+            hwnd = int(self.winId())
+            
+            # 设置窗口为最顶层
+            ctypes.windll.user32.SetWindowPos(
+                hwnd,
+                HWND_TOPMOST,
+                0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW
+            )
+            
+            # 同样设置气泡窗口（如果存在）
+            if hasattr(self, 'chat_bubble') and self.chat_bubble:
+                try:
+                    bubble_hwnd = int(self.chat_bubble.winId())
+                    ctypes.windll.user32.SetWindowPos(
+                        bubble_hwnd,
+                        HWND_TOPMOST,
+                        0, 0, 0, 0,
+                        SWP_NOMOVE | SWP_NOSIZE
+                    )
+                except:
+                    pass
+            
+            self.logger.debug("Windows topmost set successfully")
+            
+        except Exception as e:
+            self.logger.warning(f"无法设置Windows置顶: {e}")
     
     def _show_chat_from_tray(self):
         """从托盘显示聊天窗口"""
@@ -1338,15 +1384,39 @@ class PetWindow(QWidget):
     
     def _on_supervision_reminder(self, context: dict):
         """处理监督模式提醒"""
-        # 确保窗口显示
-        if not self.isVisible():
-            self.show()
+        # Windows特殊处理：确保窗口从最小化或隐藏状态恢复
+        if sys.platform == "win32":
+            # 如果窗口被最小化到任务栏，需要先恢复
+            if self.isMinimized():
+                self.showNormal()
+            # 确保窗口显示
+            if not self.isVisible():
+                self.show()
+            # Windows上需要特殊处理才能真正激活窗口
+            self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
+            self.raise_()
+            self.activateWindow()
+            # 强制将窗口带到前台（Windows特有）
+            try:
+                import ctypes
+                ctypes.windll.user32.SetForegroundWindow(int(self.winId()))
+            except:
+                pass
+        else:
+            # macOS/Linux的处理
+            if not self.isVisible():
+                self.show()
             self.raise_()
             self.activateWindow()
         
         # 确保气泡显示并更新位置
         if not self.chat_bubble.isVisible():
             self.chat_bubble.show()
+        
+        # Windows上也要确保气泡窗口激活
+        if sys.platform == "win32":
+            self.chat_bubble.setWindowState(self.chat_bubble.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
+        
         self.chat_bubble.raise_()
         self.chat_bubble.activateWindow()
         self._update_bubble_position()
