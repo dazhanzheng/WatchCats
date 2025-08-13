@@ -39,7 +39,11 @@ class SupervisionMode(QObject):
         self.long_term_goal = ""  # 长期目标
         self.short_term_goals = []  # 短期目标列表
         self.check_thread: Optional[threading.Thread] = None
-        self.check_interval = 300  # 检查间隔（5分钟）
+        # 检查间隔（秒）- 可以通过环境变量调整，便于测试
+        import os
+        self.check_interval = int(os.environ.get('SUPERVISION_CHECK_INTERVAL', '300'))  # 默认5分钟
+        if self.check_interval != 300:
+            print(f"[监督模式] 检查间隔设置为 {self.check_interval} 秒")
         self.last_check_time = None
         
         # 加载保存的监督设置
@@ -138,39 +142,73 @@ class SupervisionMode(QObject):
     
     def _check_loop(self):
         """检查循环"""
+        print(f"[监督模式] 检查线程已启动，每{self.check_interval}秒检查一次")
+        
+        # 首次启动后立即进行一次检查（可选，用于测试）
+        # 如果不想立即检查，可以注释掉这部分
+        if self.is_active:
+            print("[监督模式] 执行首次检查...")
+            try:
+                self._check_activity()
+            except Exception as e:
+                print(f"[监督模式] 首次检查出错: {e}")
+        
         while self.is_active:
-            time.sleep(self.check_interval)
+            # 等待指定间隔
+            for i in range(self.check_interval):
+                if not self.is_active:
+                    print("[监督模式] 检查线程已停止")
+                    return
+                time.sleep(1)
             
             if not self.is_active:
                 break
             
+            print(f"[监督模式] 执行定期检查... (时间: {datetime.now().strftime('%H:%M:%S')})")
             try:
                 self._check_activity()
             except Exception as e:
-                print(f"检查活动时出错: {e}")
+                print(f"[监督模式] 检查活动时出错: {e}")
+        
+        print("[监督模式] 检查循环已退出")
     
     def _check_activity(self):
         """检查用户活动是否符合目标"""
         # 获取过去5分钟的活动数据
         current_time = datetime.now()
+        print(f"[监督模式] 开始检查活动... (时间: {current_time.strftime('%H:%M:%S')})")
         
         # 首先检查AFK状态
         if self._is_user_afk():
-            print("用户处于AFK状态，跳过监督检查")
+            print("[监督模式] 用户处于AFK状态，跳过监督检查")
             self.last_check_time = current_time
             return
         
+        print("[监督模式] 用户活跃，获取活动统计...")
         # 获取多时段的活动统计
         stats = self._get_comprehensive_activity_stats()
         
         if stats:
+            print("[监督模式] 统计数据获取成功，进行LLM评估...")
             # 使用增强的LLM评估
             evaluation_result = self._evaluate_activity_enhanced(stats)
             
-            if evaluation_result and evaluation_result.get('should_remind'):
-                # 生成增强的提醒内容
-                reminder_context = self._create_enhanced_reminder_context(stats, evaluation_result)
-                self.reminder_needed.emit(reminder_context)
+            if evaluation_result:
+                print(f"[监督模式] 评估结果: should_remind={evaluation_result.get('should_remind')}, "
+                      f"deviation_level={evaluation_result.get('deviation_level', '未知')}")
+                
+                if evaluation_result.get('should_remind'):
+                    print("[监督模式] 需要提醒用户！")
+                    # 生成增强的提醒内容
+                    reminder_context = self._create_enhanced_reminder_context(stats, evaluation_result)
+                    self.reminder_needed.emit(reminder_context)
+                    print("[监督模式] 提醒信号已发送")
+                else:
+                    print("[监督模式] 用户活动符合目标，无需提醒")
+            else:
+                print("[监督模式] 评估结果为空")
+        else:
+            print("[监督模式] 无法获取统计数据")
         
         self.last_check_time = current_time
     
@@ -276,7 +314,7 @@ class SupervisionMode(QObject):
             # 获取当前人设
             from .core.persona_manager import PersonaManager
             persona_manager = PersonaManager()
-            current_persona = persona_manager.get_current_persona()
+            current_persona = persona_manager.get_current_persona_info()
             
             # 构建增强的评估提示
             prompt = f"""你是巴利（Baal），一个监督用户生产力的桌面宠物助手。
@@ -313,7 +351,7 @@ class SupervisionMode(QObject):
 """
             
             # 使用LLM评估
-            response = self.llm_assistant.ask(prompt)
+            response = self.llm_assistant.chat(prompt)
             
             # 解析JSON响应
             import json
@@ -370,7 +408,7 @@ class SupervisionMode(QObject):
 只回答"是"或"否"。"""
             
             # 使用LLM判断
-            response = self.llm_assistant.ask(prompt)
+            response = self.llm_assistant.chat(prompt)
             
             # 简单判断回复
             return "是" in response or "符合" in response or "yes" in response.lower()
