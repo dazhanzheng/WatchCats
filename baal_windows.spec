@@ -109,7 +109,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='Baal宠物助手',
+    name='WatchCats',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
