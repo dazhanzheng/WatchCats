@@ -60,8 +60,7 @@ baal-standalone/
 │   │   │   ├── goals_dialog.py       # 目标管理对话框
 │   │   │   └── calendar_dialog_modern.py # 现代化日历界面
 │   │   ├── main.py          # 主入口点
-│   │   ├── supervision_mode.py # 生产力监督系统
-│   │   └── test_*.py        # 各种测试文件
+│   │   └── supervision_mode.py # 生产力监督系统
 │   ├── llm_assistant/       # LangChain 集成
 │   │   ├── assistant.py    # 完整功能的 LLM 助手
 │   │   ├── binary_intent_classifier.py # 意图分类器
@@ -78,8 +77,6 @@ baal-standalone/
 ├── scripts/                # 构建和实用脚本
 │   └── dmgbuild-settings.py # DMG 创建配置
 ├── venv/                   # Python 3.9 虚拟环境
-├── build/                  # 构建工件（生成）
-├── dist/                   # 分发文件（生成）
 ├── run_desktop_pet.py      # 主入口脚本
 ├── build.sh               # macOS 自动化构建脚本
 ├── build_macos.sh         # 增强 macOS 构建脚本
@@ -91,7 +88,6 @@ baal-standalone/
 ├── baal_windows.spec      # Windows 专用配置
 ├── requirements.txt       # Python 依赖
 ├── Info.plist            # macOS 应用元数据
-├── test_*.py              # 根目录测试文件
 └── CLAUDE.md             # 本文档
 ```
 
@@ -120,44 +116,6 @@ venv\Scripts\activate     # Windows
 ./venv/bin/python baal/desktop_pet/main.py
 ```
 
-### 测试命令
-```bash
-# 性能测试
-./venv/bin/python baal/desktop_pet/test_parallel_performance.py
-
-# 意图分类测试
-./venv/bin/python baal/desktop_pet/test_simple_intent.py
-
-# UI 测试
-./venv/bin/python baal/desktop_pet/test_ui_summary.py
-
-# 核心功能测试
-./venv/bin/python baal/desktop_pet/test_core_features.py
-
-# 日程功能测试
-./venv/bin/python baal/desktop_pet/test_schedule_*.py
-
-# 人格切换测试（2025-08-11 新增）
-./venv/bin/python test_persona_switch.py                    # 人格系统测试
-
-# 单实例测试（2025-08-11 新增）
-./venv/bin/python test_single_instance.py                   # 单实例保护测试
-
-# Windows 配置测试（2025-08-11 新增）
-./venv/bin/python test_windows_config.py                    # Windows 配置管理
-# 意图分类测试（2025-08-13 新增）
-./venv/bin/python test_intent_classifier_direct.py   # 直接意图分类测试
-
-# 配置管理测试（2025-08-12 新增）
-./venv/bin/python test_config_isolated.py           # 隔离配置测试
-./venv/bin/python test_enhanced_config.py           # 增强配置测试
-./venv/bin/python test_windows_config_fixed.py      # Windows 配置修复测试
-
-# Bug 修复测试（2025-08-12 新增）
-./venv/bin/python test_bug_fixes.py                 # Bug 修复集成测试
-./venv/bin/python test_bug_fixes_unit.py            # Bug 修复单元测试
-```
-
 ### 构建命令
 ```bash
 # macOS 构建
@@ -180,20 +138,6 @@ dmgbuild -s scripts/dmgbuild-settings.py -D app=dist/Watch\ Cats.app "Watch Cats
 ./fix_app.sh
 ```
 
-### 调试工具
-```bash
-# 重置窗口位置
-./venv/bin/python baal/desktop_pet/reset_position.py
-
-# 调试摘要功能
-./venv/bin/python baal/desktop_pet/debug_summary.py
-
-# 启动测试
-./venv/bin/python test_startup.py
-
-# 查看日志
-./venv/bin/python view_logs.py
-```
 
 ## 技术架构
 
@@ -566,11 +510,6 @@ dmgbuild -s scripts/dmgbuild-settings.py -D app=dist/Watch\ Cats.app "Watch Cats
 - **新增**: 平台专用 PyInstaller 配置
   - baal_macos.spec：macOS 优化配置
   - baal_windows.spec：Windows 优化配置
-- **新增**: 测试脚本
-  - test_persona_switch.py：人格切换测试
-  - test_single_instance.py：单实例测试
-  - test_windows_config.py：Windows 配置测试
-  - debug_windows_config.py：配置调试工具
 
 ### 2025-08-10
 - **修复**: 短时长日程（10分钟）在日历视图中不可见的问题
@@ -580,12 +519,6 @@ dmgbuild -s scripts/dmgbuild-settings.py -D app=dist/Watch\ Cats.app "Watch Cats
   - 在系统提示词中动态注入当前系统日期
   - 添加相对日期（今天/明天/后天）的明确映射
   - 防止 LLM 使用训练数据中的过期日期
-- **新增**: 5个日期相关测试脚本
-  - `test_date_fix.py`: 基础日期修复验证
-  - `test_relative_dates.py`: 相对日期处理测试
-  - `test_enhanced_dates.py`: 增强日期映射测试
-  - `test_date_comprehensive.py`: 综合日期功能测试
-  - `test_short_schedule.py`: 短时长日程显示测试
 - **改进**: 更新文档结构，添加详细的问题追踪和解决方案
 
 ### 2025-08-07
