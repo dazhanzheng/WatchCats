@@ -1054,6 +1054,29 @@ class PetWindow(QWidget):
         self.raise_()
         self.activateWindow()
         
+        # 重新定位所有相关的UI元素
+        # 1. 重新定位对话气泡（如果正在显示）
+        if hasattr(self, 'chat_bubble') and self.chat_bubble and self.chat_bubble.isVisible():
+            self.chat_bubble.set_position_relative_to(self)
+        
+        # 2. 重新定位设置按钮（使用相对位置）
+        if hasattr(self, 'settings_btn') and self.settings_btn:
+            if hasattr(self.settings_btn, 'relative_pos'):
+                # 使用按钮的相对位置
+                self.settings_btn.move(self.settings_btn.relative_pos)
+            else:
+                # 使用默认位置
+                self.settings_btn.move(QPoint(self.width() - 40, self.height() - 40))
+        
+        # 3. 重新定位监督按钮（使用相对位置）
+        if hasattr(self, 'supervision_btn') and self.supervision_btn:
+            if hasattr(self.supervision_btn, 'relative_pos'):
+                # 使用按钮的相对位置
+                self.supervision_btn.move(self.supervision_btn.relative_pos)
+            else:
+                # 使用默认位置
+                self.supervision_btn.move(QPoint(self.width() - 75, self.height() - 40))
+        
         # 显示提示
         if hasattr(self, 'chat_bubble'):
             response = PresetResponseManager.get_response(
