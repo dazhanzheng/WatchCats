@@ -7,12 +7,21 @@ from PyInstaller.utils.hooks import collect_data_files, collect_all
 # 收集必要的数据文件
 datas = []
 hiddenimports = []
+binaries = []
+
+# 收集 PyQt6 平台插件和依赖
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
+qt6_datas = collect_data_files('PyQt6')
+qt6_binaries = collect_dynamic_libs('PyQt6')
+datas += qt6_datas
+binaries += qt6_binaries
 
 # 收集 aw-client 和 aw-core 模块
 aw_client_datas, aw_client_binaries, aw_client_hiddenimports = collect_all('aw_client')
 aw_core_datas, aw_core_binaries, aw_core_hiddenimports = collect_all('aw_core')
 
 datas += aw_client_datas + aw_core_datas
+binaries += aw_client_binaries + aw_core_binaries
 hiddenimports += aw_client_hiddenimports + aw_core_hiddenimports
 
 # 添加 baal 资源文件
@@ -34,6 +43,9 @@ hiddenimports += [
     'PyQt6.QtCore',
     'PyQt6.QtGui',
     'PyQt6.QtWidgets',
+    'PyQt6.QtNetwork',
+    'PyQt6.sip',
+    'PyQt6.uic',
     'httpx',
     'volcengine_python_sdk',
     'requests',
@@ -56,6 +68,8 @@ hiddenimports += [
     'baal.scheduler.schedule_trigger',
     'baal.desktop_pet.supervision_mode',
     'baal.desktop_pet.core.single_instance',
+    'baal.desktop_pet.core.logger_config',
+    'baal.desktop_pet.ui.developer_console',
     'pytz',
     'dateutil',
     'dateutil.parser',
@@ -71,7 +85,7 @@ hiddenimports += [
 a = Analysis(
     ['run_desktop_pet.py'],
     pathex=['.'],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
@@ -113,7 +127,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,  # Disabled to prevent potential crashes
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,  # 不显示控制台窗口
@@ -122,7 +136,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='baal/resources/cat.ico' if os.path.exists('baal/resources/cat.ico') else None,  # Windows需要.ico格式图标
+    icon='baal/resources/app_icon.ico' if os.path.exists('baal/resources/app_icon.ico') else None,  # Windows需要.ico格式图标
     version_file=None,
     uac_admin=False,  # 不需要管理员权限
     uac_uiaccess=False
