@@ -41,9 +41,7 @@ class LLMHandler:
         self.persona_manager = PersonaManager(persona_level)
         self.logger.info(f"Persona manager initialized with level: {persona_level.name}")
         
-        self.logger.debug(f"Base URL: {base_url}")
-        self.logger.debug(f"Model: {model}")
-        self.logger.debug("API key configured (not logged for security)")
+        # 不记录敏感信息的DEBUG日志
         
         # 字符显示间隔配置（单位：秒）
         self.char_delays = {
@@ -136,7 +134,7 @@ class LLMHandler:
     
     def _create_llm(self, streaming: bool = True, temperature: float = 0.7) -> ChatOpenAI:
         """创建LLM实例"""
-        self.logger.debug(f"Creating LLM instance - streaming: {streaming}, temperature: {temperature}")
+        # 创建LLM实例
         try:
             llm = ChatOpenAI(
                 base_url=self.base_url,
@@ -145,7 +143,7 @@ class LLMHandler:
                 temperature=temperature,
                 streaming=streaming
             )
-            self.logger.debug("LLM instance created successfully")
+            # LLM实例创建成功
             return llm
         except Exception as e:
             self.logger.error(f"Failed to create LLM instance: {e}", exc_info=True)

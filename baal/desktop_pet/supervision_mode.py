@@ -391,7 +391,7 @@ class SupervisionMode(QObject):
             if len(stats_24h) > 1000:
                 stats_24h = stats_24h[:1000] + "...(数据已截断)"
             
-            logger.debug(f"准备发送给LLM的数据长度 - 5分钟:{len(stats_5m)}, 2小时:{len(stats_2h)}, 24小时:{len(stats_24h)}")
+            # 数据准备完成
             
             # 构建增强的评估提示
             prompt = f"""你是巴利（Baal），一个监督用户生产力的桌面宠物助手。
@@ -439,10 +439,10 @@ class SupervisionMode(QObject):
 5. 避免过于频繁的提醒，只在明显偏离时才提醒
 """
             
-            logger.debug("发送评估请求给LLM...")
+            # 发送评估请求
             # 使用LLM评估
             response = self.llm_assistant.chat(prompt)
-            logger.debug(f"收到LLM响应 (长度: {len(response)} 字符)")
+            # 收到LLM响应
             
             # 解析JSON响应
             import json

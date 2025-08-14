@@ -34,9 +34,8 @@ class ConfigManager:
         # 开发者配置文件路径（在项目根目录）
         self.developer_config_file = Path(__file__).parent.parent.parent.parent / "developer_config.json"
         
-        self.logger.debug(f"Config directory: {self.config_dir}")
-        self.logger.debug(f"Config file: {self.config_file}")
-        self.logger.debug(f"Developer config file: {self.developer_config_file}")
+        # 只在INFO级别记录一次配置位置
+        self.logger.info(f"Config directory: {self.config_dir}")
         
         # 确保配置目录存在
         self._ensure_config_dir()
@@ -63,7 +62,7 @@ class ConfigManager:
                 try:
                     test_file.write_text('test')
                     test_file.unlink()
-                    self.logger.debug(f"Config directory verified writable: {self.config_dir}")
+                    # 配置目录验证成功，不需要每次都记录
                     return
                 except Exception as e:
                     self.logger.warning(f"Directory exists but not writable: {e}")
@@ -159,11 +158,11 @@ class ConfigManager:
                     # 将开发者配置合并到主配置中
                     if 'show_developer_mode' in dev_config:
                         self.config['show_developer_mode'] = dev_config['show_developer_mode']
-                        self.logger.debug(f"Developer mode enabled: {dev_config['show_developer_mode']}")
+                        self.logger.info(f"Developer mode enabled: {dev_config['show_developer_mode']}")
             else:
                 # 如果没有开发者配置文件，默认显示开发者模式
                 self.config['show_developer_mode'] = True
-                self.logger.debug("开发者配置文件不存在，默认启用开发者模式")
+                # 开发者配置文件不存在，默认启用开发者模式
         except Exception as e:
             self.logger.warning(f"加载开发者配置失败: {e}")
             # 出错时默认显示开发者模式
@@ -176,7 +175,7 @@ class ConfigManager:
             try:
                 with open(self.config_file, 'r', encoding='utf-8') as f:
                     config = json.load(f)
-                    self.logger.debug(f"Raw config loaded: {len(config)} keys")
+                    # 配置加载成功
                     
                     # 确保基础配置存在
                     if 'base_url' not in config:
@@ -190,7 +189,7 @@ class ConfigManager:
                     # 记录加载的配置（不记录敏感信息）
                     safe_config = {k: v for k, v in config.items() if k != 'api_key'}
                     safe_config['api_key'] = '***' if config.get('api_key') else 'Not set'
-                    self.logger.debug(f"Config loaded successfully: {safe_config}")
+                    # 配置加载完成
                     
                     return config
             except json.JSONDecodeError as e:
@@ -209,7 +208,7 @@ class ConfigManager:
         # 记录配置但隐藏API密钥
         safe_config = {k: v for k, v in default_config.items() if k != 'api_key'}
         safe_config['api_key'] = '***' if default_config.get('api_key') else 'Not set'
-        self.logger.debug(f"Default config: {safe_config}")
+        # 使用默认配置
         
         # 自动保存默认配置到文件
         self._safe_write_config(default_config)
@@ -222,13 +221,13 @@ class ConfigManager:
         """保存配置到文件"""
         if config is not None:
             self.config = config
-            self.logger.debug("Using provided config for saving")
+            # 使用提供的配置进行保存
         
         # 记录要保存的配置（隐藏敏感信息）
         safe_config = {k: v for k, v in self.config.items() if k != 'api_key'}
         safe_config['api_key'] = '***' if self.config.get('api_key') else 'Not set'
         self.logger.info(f"Saving configuration to {self.config_file}")
-        self.logger.debug(f"Configuration to save: {safe_config}")
+        # 保存配置
         
         # 使用安全写入方法
         return self._safe_write_config(self.config)
@@ -260,7 +259,7 @@ class ConfigManager:
                     
                     # 复制而不是移动，避免权限问题
                     shutil.copy2(self.config_file, backup_file)
-                    self.logger.debug(f"Backed up config to: {backup_file}")
+                    # 备份成功
                 except Exception as e:
                     self.logger.warning(f"Could not create backup: {e}")
             
@@ -311,7 +310,7 @@ class ConfigManager:
         """获取API密钥"""
         api_key = self.config.get('api_key', '')
         has_key = bool(api_key)
-        self.logger.debug(f"Getting API key: {'Set' if has_key else 'Not set'}")
+        # 返回API密钥
         return api_key if api_key else None
     
     def set_api_key(self, api_key: str):
@@ -332,30 +331,28 @@ class ConfigManager:
     def get_base_url(self) -> str:
         """获取基础URL"""
         base_url = self.config.get('base_url', self.DEFAULT_BASE_URL)
-        self.logger.debug(f"Getting base URL: {base_url}")
+        # 返回基础URL
         return base_url
     
     def get_model(self) -> str:
         """获取模型名称"""
         model = self.config.get('model', self.DEFAULT_MODEL)
-        self.logger.debug(f"Getting model: {model}")
+        # 返回模型名称
         return model
     
     def get_window_position(self) -> Dict[str, int]:
         """获取窗口位置"""
         position = self.config.get('window_position', {'x': 100, 'y': 100})
-        self.logger.debug(f"Getting window position: x={position['x']}, y={position['y']}")
+        # 返回窗口位置
         return position
     
     def set_window_position(self, x: int, y: int):
         """设置窗口位置"""
-        self.logger.debug(f"Setting window position: x={x}, y={y}")
+        # 设置窗口位置
         old_position = self.config.get('window_position', {})
         self.config['window_position'] = {'x': x, 'y': y}
         
-        if self.save_config():
-            self.logger.debug(f"Window position updated from ({old_position.get('x')}, {old_position.get('y')}) to ({x}, {y})")
-        else:
+        if not self.save_config():
             self.logger.warning("Failed to save window position")
     
     def get_temperature_settings(self) -> Dict[str, float]:
@@ -364,18 +361,18 @@ class ConfigManager:
             'chat_temperature': self.config.get('chat_temperature', 0.7),
             'parse_temperature': self.config.get('parse_temperature', 0.1)
         }
-        self.logger.debug(f"Getting temperature settings: chat={settings['chat_temperature']}, parse={settings['parse_temperature']}")
+        # 返回温度设置
         return settings
     
     def is_configured(self) -> bool:
         """检查是否已配置API密钥"""
         configured = bool(self.get_api_key())
-        self.logger.debug(f"Configuration status: {'Configured' if configured else 'Not configured'}")
+        # 返回配置状态
         return configured 
     
     def get_config(self) -> Dict[str, Any]:
         """获取完整配置"""
-        self.logger.debug("Getting full configuration")
+        # 不记录日志，这个方法会被频繁调用
         # 返回配置的副本，避免外部修改
         return self.config.copy()
     

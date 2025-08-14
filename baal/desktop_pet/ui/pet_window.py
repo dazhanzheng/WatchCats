@@ -196,12 +196,12 @@ class PetWindow(QWidget):
         
         # 配置管理器
         self.config_manager = ConfigManager()
-        self.logger.debug("ConfigManager initialized")
+        # ConfigManager初始化
         
         # 表情管理器
         try:
             self.emotion_manager = EmotionManager()
-            self.logger.debug("EmotionManager initialized")
+            # EmotionManager初始化
         except Exception as e:
             self.logger.error(f"Failed to initialize EmotionManager: {e}", exc_info=True)
             raise
@@ -213,17 +213,17 @@ class PetWindow(QWidget):
             persona_level_value = config.get('persona_level', 1)  # 默认为严厉主人档
             persona_level = PersonaLevel(persona_level_value)
             self.persona_manager = PersonaManager(initial_level=persona_level)
-            self.logger.debug(f"PersonaManager initialized with level: {persona_level.name}")
+            # PersonaManager初始化
         except Exception as e:
             self.logger.error(f"Failed to initialize PersonaManager: {e}", exc_info=True)
             # 使用默认人设
             self.persona_manager = PersonaManager()
-            self.logger.debug("PersonaManager initialized with default level")
+            # 使用默认人设初始化
         
         # LLM处理器
         self.llm_handler = None
         self.async_worker = None
-        self.logger.debug("LLM handler and async worker placeholder initialized")
+        # LLM处理器和异步工作线程占位符
         
         # 窗口拖动相关
         self.drag_position = None
@@ -253,7 +253,7 @@ class PetWindow(QWidget):
         try:
             # 传入persona_manager以保持人设一致性
             self.supervision_mode = SupervisionMode(persona_manager=self.persona_manager)
-            self.logger.debug("Advanced features initialized")
+            # 高级功能初始化
         except Exception as e:
             self.logger.error(f"Failed to initialize advanced features: {e}", exc_info=True)
             # Continue without advanced features
@@ -324,7 +324,7 @@ class PetWindow(QWidget):
             always_on_top = config.get('always_on_top', True)
             self._update_chat_bubble_flags(always_on_top)
             
-            self.logger.debug("Chat bubble initialized and connected")
+            # 聊天气泡初始化和连接
         except Exception as e:
             self.logger.error(f"Failed to initialize chat bubble: {e}", exc_info=True)
             raise
@@ -595,7 +595,7 @@ class PetWindow(QWidget):
         
         if self.config_manager.is_configured():
             try:
-                self.logger.debug("Configuration found, initializing LLM handler")
+                # 配置找到，初始化LLM处理器
                 # 获取配置中的人设级别
                 config = self.config_manager.get_config()
                 persona_level_value = config.get('persona_level', 1)  # 默认为严厉主人档
@@ -653,10 +653,10 @@ class PetWindow(QWidget):
                 self._update_emotion(emotion_match)
                 # 移除表情标记后显示消息
                 welcome_msg = welcome_msg[4:].strip()
-            self.logger.debug("Configured welcome message displayed")
+            # 显示已配置的欢迎消息
         else:
             welcome_msg = "契约未成立。设置你的密钥，否则本座可没兴趣理会你。"
-            self.logger.debug("Unconfigured welcome message displayed")
+            # 显示未配置的欢迎消息
         
         # 使用独立气泡显示消息
         self.chat_bubble.show_message(welcome_msg)
@@ -892,8 +892,7 @@ class PetWindow(QWidget):
     def _on_token_received(self, token: str):
         """处理接收到的token"""
         # Use debug level for token logging as it can be very frequent
-        if len(token.strip()) > 0:  # Only log non-whitespace tokens
-            self.logger.debug(f"Token received: '{token[:20]}...'")
+        # 不记录token日志，因为会非常频繁
         self.chat_bubble.append_text(token)
     
     def _on_stream_finished(self):
