@@ -55,13 +55,15 @@ jobs:
         
     - name: Test executable
       run: |
-        # 简单测试exe是否能运行
-        if (Test-Path "dist\${{ env.APP_NAME }}.exe") {
-          Write-Host "✓ Executable found: dist\${{ env.APP_NAME }}.exe"
-          $fileInfo = Get-Item "dist\${{ env.APP_NAME }}.exe"
-          Write-Host "  Size: $([math]::Round($fileInfo.Length / 1MB, 2)) MB"
+        # 查找实际生成的exe文件
+        $exeFiles = Get-ChildItem -Path "dist" -Filter "*.exe" -ErrorAction SilentlyContinue
+        if ($exeFiles) {
+          $exePath = $exeFiles[0]
+          Write-Host "✓ Executable found: $($exePath.Name)"
+          Write-Host "  Path: $($exePath.FullName)"
+          Write-Host "  Size: $([math]::Round($exePath.Length / 1MB, 2)) MB"
         } else {
-          Write-Host "✗ Executable not found!"
+          Write-Host "✗ No executable found in dist/ directory!"
           exit 1
         }
 
@@ -162,7 +164,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: ${{ env.APP_NAME_EN }}-portable-windows
-        path: dist\${{ env.APP_NAME }}.exe
+        path: dist\*.exe
         retention-days: 30
 
     - name: Upload ZIP package artifact
