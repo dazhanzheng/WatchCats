@@ -233,7 +233,7 @@ jobs:
           'set QT_PLUGIN_PATH=%~dp0PyQt6\Qt6\plugins;%~dp0Qt6\plugins;%~dp0plugins',
           'set QT_QPA_PLATFORM_PLUGIN_PATH=%~dp0PyQt6\Qt6\plugins\platforms;%~dp0Qt6\plugins\platforms;%~dp0plugins\platforms',
           "set QT_OPENGL=angle",
-          'start "" "%~dp0Baal宠物助手.exe"'
+          'start "" "%~dp0WatchCats.exe"'
         )
         $batchLines -join "`r`n" | Out-File -FilePath "$packageDir\Start.bat" -Encoding ASCII
         
@@ -247,7 +247,7 @@ jobs:
           "Baal Pet Assistant - Quick Start Guide",
           "=======================================",
           "",
-          "1. Double-click 'Start.bat' or 'Baal宠物助手.exe' to run",
+          "1. Double-click 'Start.bat' or 'WatchCats.exe' to run",
           "2. Configure API keys on first run (right-click the cat icon)",
           "3. Enjoy your AI desktop companion!",
           "",
