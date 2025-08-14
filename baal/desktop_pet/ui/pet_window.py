@@ -79,8 +79,9 @@ from .settings_dialog import SettingsDialog
 from .supervision_dialog import SupervisionDialog, SupervisionStatusWidget
 from .developer_console import DeveloperConsole
 from ..core import ConfigManager, LLMHandler
-from ..core.persona_manager import PersonaLevel
+from ..core.persona_manager import PersonaLevel, PersonaManager
 from ..core.emotion_manager import EmotionManager
+from ..core.preset_responses import PresetResponseManager
 from ..core.logger_config import get_logger, log_performance, log_ui_event
 from ..supervision_mode import SupervisionMode
 
@@ -205,6 +206,20 @@ class PetWindow(QWidget):
             self.logger.error(f"Failed to initialize EmotionManager: {e}", exc_info=True)
             raise
         
+        # 人设管理器
+        try:
+            # 从配置中获取人设级别
+            config = self.config_manager.get_config()
+            persona_level_value = config.get('persona_level', 1)  # 默认为严厉主人档
+            persona_level = PersonaLevel(persona_level_value)
+            self.persona_manager = PersonaManager(initial_level=persona_level)
+            self.logger.debug(f"PersonaManager initialized with level: {persona_level.name}")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize PersonaManager: {e}", exc_info=True)
+            # 使用默认人设
+            self.persona_manager = PersonaManager()
+            self.logger.debug("PersonaManager initialized with default level")
+        
         # LLM处理器
         self.llm_handler = None
         self.async_worker = None
@@ -236,7 +251,8 @@ class PetWindow(QWidget):
         
         # 初始化新功能组件
         try:
-            self.supervision_mode = SupervisionMode()
+            # 传入persona_manager以保持人设一致性
+            self.supervision_mode = SupervisionMode(persona_manager=self.persona_manager)
             self.logger.debug("Advanced features initialized")
         except Exception as e:
             self.logger.error(f"Failed to initialize advanced features: {e}", exc_info=True)
@@ -626,9 +642,17 @@ class PetWindow(QWidget):
         self.logger.info("Showing welcome message")
         
         if self.config_manager.is_configured():
-            welcome_msg = "哼，又一个需要监管的人类。右键召唤本座，让我看看你今天都在偷懒些什么。"
-            # 设置默认表情为正常
-            self._update_emotion("<#5>")
+            # 使用预设反应管理器获取欢迎消息
+            welcome_msg = PresetResponseManager.get_response(
+                self.persona_manager.current_level,
+                "welcome"
+            )
+            # 从消息中提取表情并更新
+            if welcome_msg.startswith("<#"):
+                emotion_match = welcome_msg[:4]  # 提取 <#n> 格式
+                self._update_emotion(emotion_match)
+                # 移除表情标记后显示消息
+                welcome_msg = welcome_msg[4:].strip()
             self.logger.debug("Configured welcome message displayed")
         else:
             welcome_msg = "契约未成立。设置你的密钥，否则本座可没兴趣理会你。"
@@ -751,7 +775,14 @@ class PetWindow(QWidget):
             
             if self.double_click_count == 1:
                 # 第一次：基本不耐烦
-                self.chat_bubble.show_message("别碰本座。右键召唤才是正确的方式，愚蠢的人类。")
+                response = PresetResponseManager.get_response(
+                    self.persona_manager.current_level,
+                    "left_click_warning"
+                )
+                if response.startswith("<#"):
+                    self._update_emotion(response[:4])
+                    response = response[4:].strip()
+                self.chat_bubble.show_message(response)
                 self.logger.debug("First double-click: basic annoyance message")
             elif self.double_click_count == 2:
                 # 第二次：更加不耐烦
@@ -759,7 +790,14 @@ class PetWindow(QWidget):
                 self.logger.debug("Second double-click: increased annoyance")
             elif self.double_click_count == 3:
                 # 第三次：非常不耐烦
-                self.chat_bubble.show_message("最后一次警告，人类。再这样挑衅我的耐心，后果自负。")
+                response = PresetResponseManager.get_response(
+                    self.persona_manager.current_level,
+                    "repeated_left_click"
+                )
+                if response.startswith("<#"):
+                    self._update_emotion(response[:4])
+                    response = response[4:].strip()
+                self.chat_bubble.show_message(response)
                 self.logger.debug("Third double-click: final warning")
             elif self.double_click_count >= 4:
                 # 第四次及以后：如果气泡打开，则关闭它；否则不回应
@@ -811,7 +849,14 @@ class PetWindow(QWidget):
         # 检查是否已配置
         if not self.config_manager.is_configured():
             self.logger.warning("Message sent but LLM not configured")
-            self.chat_bubble.show_message("契约未成立，本座拒绝回应。去设置你的密钥。")
+            response = PresetResponseManager.get_response(
+                self.persona_manager.current_level,
+                "api_not_configured"
+            )
+            if response.startswith("<#"):
+                self._update_emotion(response[:4])
+                response = response[4:].strip()
+            self.chat_bubble.show_message(response)
             return
         
         # 延迟显示AI回复（让用户消息先显示）
@@ -973,7 +1018,14 @@ class PetWindow(QWidget):
                     )
             
             if self.config_manager.is_configured():
-                self.chat_bubble.show_message("契约成立。现在，让本座看看你都在做些什么见不得人的事。")
+                response = PresetResponseManager.get_response(
+                    self.persona_manager.current_level,
+                    "api_configured"
+                )
+                if response.startswith("<#"):
+                    self._update_emotion(response[:4])
+                    response = response[4:].strip()
+                self.chat_bubble.show_message(response)
     
     def _toggle_visibility(self):
         """切换窗口可见性"""
@@ -1005,7 +1057,14 @@ class PetWindow(QWidget):
         
         # 显示提示
         if hasattr(self, 'chat_bubble'):
-            self.chat_bubble.show_message("位置已重置。本座现在应该在你的右下角了。")
+            response = PresetResponseManager.get_response(
+                self.persona_manager.current_level,
+                "position_reset"
+            )
+            if response.startswith("<#"):
+                self._update_emotion(response[:4])
+                response = response[4:].strip()
+            self.chat_bubble.show_message(response)
     
     
     def _toggle_start_minimized(self, checked):
@@ -1036,9 +1095,23 @@ class PetWindow(QWidget):
         # 显示提示
         if hasattr(self, 'chat_bubble'):
             if checked:
-                self.chat_bubble.show_message("哼，本座当然要居高临下地监视你。")
+                response = PresetResponseManager.get_response(
+                    self.persona_manager.current_level,
+                    "always_on_top_enable"
+                )
+                if response.startswith("<#"):
+                    self._update_emotion(response[:4])
+                    response = response[4:].strip()
+                self.chat_bubble.show_message(response)
             else:
-                self.chat_bubble.show_message("切，本座偶尔也会给你一点喘息的空间。")
+                response = PresetResponseManager.get_response(
+                    self.persona_manager.current_level,
+                    "always_on_top_disable"
+                )
+                if response.startswith("<#"):
+                    self._update_emotion(response[:4])
+                    response = response[4:].strip()
+                self.chat_bubble.show_message(response)
     
     def _update_window_flags(self):
         """更新窗口标志（主要用于切换置顶状态）"""
@@ -1347,7 +1420,14 @@ class PetWindow(QWidget):
                 # 使用已保存的目标直接启动
                 success = self.supervision_mode.start_supervision()
                 if success:
-                    self.chat_bubble.show_message("监督模式已启动。")
+                    response = PresetResponseManager.get_response(
+                        self.persona_manager.current_level,
+                        "supervision_start"
+                    )
+                    if response.startswith("<#"):
+                        self._update_emotion(response[:4])
+                        response = response[4:].strip()
+                    self.chat_bubble.show_message(response)
                     self._update_supervision_button_style()
                 else:
                     # API未配置，提示用户
@@ -1371,7 +1451,14 @@ class PetWindow(QWidget):
         if self.supervision_mode.is_active:
             # 停止监督
             self.supervision_mode.stop_supervision()
-            self.chat_bubble.show_message("监督模式已关闭。哼，本座也需要休息。")
+            response = PresetResponseManager.get_response(
+                self.persona_manager.current_level,
+                "supervision_stop"
+            )
+            if response.startswith("<#"):
+                self._update_emotion(response[:4])
+                response = response[4:].strip()
+            self.chat_bubble.show_message(response)
         else:
             # 显示监督设置对话框
             dialog = SupervisionDialog(
@@ -1390,7 +1477,14 @@ class PetWindow(QWidget):
         
         success = self.supervision_mode.start_supervision(long_term_goal, short_term_goals)
         if success:
-            self.chat_bubble.show_message(f"监督模式已启动。本座会盯着你的，别想偷懒。")
+            response = PresetResponseManager.get_response(
+                self.persona_manager.current_level,
+                "supervision_start"
+            )
+            if response.startswith("<#"):
+                self._update_emotion(response[:4])
+                response = response[4:].strip()
+            self.chat_bubble.show_message(response)
             self._update_supervision_button_style()
         else:
             # 监督模式启动失败，提示用户配置API
@@ -1417,7 +1511,14 @@ class PetWindow(QWidget):
                 # 重新尝试启动监督模式
                 success = self.supervision_mode.start_supervision(goal, tasks)
                 if success:
-                    self.chat_bubble.show_message("API配置成功！监督模式已启动。")
+                    response = PresetResponseManager.get_response(
+                        self.persona_manager.current_level,
+                        "supervision_start"
+                    )
+                    if response.startswith("<#"):
+                        self._update_emotion(response[:4])
+                        response = response[4:].strip()
+                    self.chat_bubble.show_message(response)
                 else:
                     self.chat_bubble.show_message("API配置可能有误，请检查设置。")
         else:
@@ -1506,22 +1607,25 @@ class PetWindow(QWidget):
         
         # 获取提醒消息（由LLM生成的个性化消息）
         reminder_message = context.get('reminder_message')
+        deviation_level = context.get('deviation_level', '中度')
+        
         if reminder_message:
             # 使用LLM生成的消息
             message = reminder_message
         else:
             # 后备消息（如果LLM评估失败）
-            long_term_goal = context.get('long_term_goal', '')
-            short_term_goals = context.get('short_term_goals', [])
-            
-            message = f"喂，人类！你说好要「{long_term_goal}」的，现在在做什么？\n"
-            if short_term_goals:
-                message += f"你不是要{short_term_goals[0]}吗？赶紧回到正轨！"
-            else:
-                message += "别以为本座没看见，赶紧专心工作！"
+            # 使用预设反应管理器根据人设和偏离程度生成提醒
+            message = PresetResponseManager.get_supervision_reminder(
+                self.persona_manager.current_level,
+                deviation_level
+            )
+        
+        # 如果消息以表情标记开头，提取并更新表情
+        if message.startswith("<#"):
+            self._update_emotion(message[:4])
+            message = message[4:].strip()
         
         # 根据偏离程度设置显示时长
-        deviation_level = context.get('deviation_level', '中度')
         duration = 15000 if deviation_level == '严重' else 10000
         
         self.chat_bubble.show_message(message, duration=duration)

@@ -29,11 +29,16 @@ class SupervisionMode(QObject):
     # 信号：监督模式状态改变
     mode_changed = pyqtSignal(bool)  # True为开启，False为关闭
     
-    def __init__(self):
-        """初始化监督模式"""
+    def __init__(self, persona_manager=None):
+        """初始化监督模式
+        
+        Args:
+            persona_manager: 人设管理器实例（可选）
+        """
         super().__init__()
         self.stats_processor = StatsProcessor()
         self.config_manager = ConfigManager()
+        self.persona_manager = persona_manager  # 保存人设管理器引用
         
         # 初始化LLM助手（需要配置）
         self.llm_assistant = None
@@ -364,9 +369,14 @@ class SupervisionMode(QObject):
         
         try:
             # 获取当前人设
-            from .core.persona_manager import PersonaManager
-            persona_manager = PersonaManager()
-            current_persona = persona_manager.get_current_persona_info()
+            if self.persona_manager:
+                current_persona = self.persona_manager.get_current_persona_info()
+            else:
+                # 如果没有人设管理器，使用默认值
+                current_persona = {
+                    'name': '严厉主人',
+                    'description': '巴利是用户的主人，拥有绝对支配权'
+                }
             
             # 准备各时段数据（限制长度但保留关键信息）
             stats_5m = stats.get('stats_5m', '无数据')
@@ -521,14 +531,38 @@ class SupervisionMode(QObject):
         Returns:
             增强的提醒上下文字典
         """
+        # 如果没有LLM生成的消息，使用预设反应管理器生成后备消息
+        reminder_message = evaluation.get('reminder_message')
+        deviation_level = evaluation.get('deviation_level', '中度')
+        
+        if not reminder_message:
+            # 获取当前人设并生成合适的提醒
+            try:
+                from .core.preset_responses import PresetResponseManager
+                if self.persona_manager:
+                    reminder_message = PresetResponseManager.get_supervision_reminder(
+                        self.persona_manager.current_level,
+                        deviation_level
+                    )
+                else:
+                    # 使用默认人设
+                    from .core.persona_manager import PersonaLevel
+                    reminder_message = PresetResponseManager.get_supervision_reminder(
+                        PersonaLevel.STRICT_MASTER,
+                        deviation_level
+                    )
+            except:
+                # 如果无法加载预设反应，使用默认消息
+                reminder_message = '你似乎偏离了目标，请回到正轨。'
+        
         return {
             'type': 'supervision_reminder',
             'long_term_goal': self.long_term_goal,
             'short_term_goals': self.short_term_goals,
             'activity_stats': stats,
             'evaluation': evaluation,
-            'reminder_message': evaluation.get('reminder_message', '你似乎偏离了目标，请回到正轨。'),
-            'deviation_level': evaluation.get('deviation_level', '未知'),
+            'reminder_message': reminder_message,
+            'deviation_level': deviation_level,
             'timestamp': datetime.now().isoformat()
         }
     
