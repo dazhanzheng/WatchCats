@@ -11,7 +11,6 @@ binaries = []
 
 # 收集 PyQt6 平台插件和依赖
 from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
-from PyInstaller.utils.hooks.qt import qt_plugins_binaries
 
 qt6_datas = collect_data_files('PyQt6')
 qt6_binaries = collect_dynamic_libs('PyQt6')
@@ -20,28 +19,61 @@ binaries += qt6_binaries
 
 # 关键修复：确保包含所有 Qt 平台插件（这是 Windows 闪退的主要原因）
 try:
-    # 收集平台插件（必须，否则 Windows 会闪退）
-    qt6_platforms = qt_plugins_binaries('platforms', 'PyQt6')
-    binaries += qt6_platforms
+    # PyInstaller 6.x 使用不同的方式收集 Qt 插件
+    from PyInstaller.utils.hooks import collect_submodules, collect_all
     
-    # 收集样式插件（推荐）
-    qt6_styles = qt_plugins_binaries('styles', 'PyQt6')
-    binaries += qt6_styles
+    # 收集所有 PyQt6 相关的二进制文件和数据
+    pyqt6_all = collect_all('PyQt6')
+    datas += pyqt6_all[0]  # datas
+    binaries += pyqt6_all[1]  # binaries
+    hiddenimports += pyqt6_all[2]  # hiddenimports
     
-    # 收集图像格式插件（处理图标和图片）
-    qt6_imageformats = qt_plugins_binaries('imageformats', 'PyQt6')
-    binaries += qt6_imageformats
-    
-    print("✓ Qt6 platform plugins collected successfully")
+    print("✓ PyQt6 collected via collect_all")
 except Exception as e:
-    print(f"Warning: Could not collect Qt6 plugins: {e}")
-    # 手动添加关键的 Windows 平台插件
+    print(f"Warning: Could not use collect_all: {e}")
+
+# 手动确保包含关键的 Qt 插件
+try:
     import PyQt6
     import os
     qt6_path = os.path.dirname(PyQt6.__file__)
-    platforms_path = os.path.join(qt6_path, 'Qt6', 'plugins', 'platforms')
-    if os.path.exists(platforms_path):
-        binaries += [(os.path.join(platforms_path, '*.dll'), 'PyQt6/Qt6/plugins/platforms')]
+    
+    # 查找并添加插件目录
+    plugin_base = os.path.join(qt6_path, 'Qt6', 'plugins')
+    if os.path.exists(plugin_base):
+        # 平台插件（关键！Windows 必须）
+        platforms_path = os.path.join(plugin_base, 'platforms')
+        if os.path.exists(platforms_path):
+            for file in os.listdir(platforms_path):
+                if file.endswith('.dll'):
+                    binaries.append((os.path.join(platforms_path, file), 'PyQt6/Qt6/plugins/platforms'))
+            print(f"✓ Added platform plugins from {platforms_path}")
+        
+        # 样式插件
+        styles_path = os.path.join(plugin_base, 'styles')
+        if os.path.exists(styles_path):
+            for file in os.listdir(styles_path):
+                if file.endswith('.dll'):
+                    binaries.append((os.path.join(styles_path, file), 'PyQt6/Qt6/plugins/styles'))
+        
+        # 图像格式插件
+        imageformats_path = os.path.join(plugin_base, 'imageformats')
+        if os.path.exists(imageformats_path):
+            for file in os.listdir(imageformats_path):
+                if file.endswith('.dll'):
+                    binaries.append((os.path.join(imageformats_path, file), 'PyQt6/Qt6/plugins/imageformats'))
+        
+        # 图标引擎插件
+        iconengines_path = os.path.join(plugin_base, 'iconengines')
+        if os.path.exists(iconengines_path):
+            for file in os.listdir(iconengines_path):
+                if file.endswith('.dll'):
+                    binaries.append((os.path.join(iconengines_path, file), 'PyQt6/Qt6/plugins/iconengines'))
+    else:
+        print(f"Warning: Qt plugin directory not found at {plugin_base}")
+        
+except Exception as e:
+    print(f"Error manually adding Qt plugins: {e}")
 
 # 收集 aw-client 和 aw-core 模块
 aw_client_datas, aw_client_binaries, aw_client_hiddenimports = collect_all('aw_client')
@@ -71,6 +103,7 @@ hiddenimports += [
     'PyQt6.QtGui',
     'PyQt6.QtWidgets',
     'PyQt6.QtNetwork',
+    'PyQt6.QtPrintSupport',  # Windows 上可能需要
     'PyQt6.sip',
     'PyQt6.uic',
     'httpx',
