@@ -69,10 +69,11 @@ class SupervisionMode(QObject):
                     base_url=config['base_url'],
                     api_key=config['api_key'],
                     model=config.get('model', 'deepseek-v3-250324'),
-                    temperature=0.1,
+                    parse_temperature=0.1,  # 解析温度保持低值，确保JSON格式正确
+                    chat_temperature=0.85,   # 提高对话温度，生成更多样化的监督提醒
                     stats_processor=self.stats_processor
                 )
-                logger.info("LLM助手初始化成功")
+                logger.info("LLM助手初始化成功（parse_temp=0.1, chat_temp=0.85）")
         except Exception as e:
             logger.error(f"初始化LLM助手失败: {e}")
             self.llm_assistant = None
@@ -418,6 +419,8 @@ class SupervisionMode(QObject):
 2. 2小时数据显示短期行为模式
 3. 24小时数据展示整体生产力状况
 
+【重要】分析时请注意数据中的绝对值（如"2小时30分"）和相对值（如"占比70%"），两者都要在提醒中体现。
+
 根据分析结果，按照以下JSON格式回答：
 {{
     "should_remind": true或false（是否需要提醒用户）,
@@ -430,6 +433,19 @@ class SupervisionMode(QObject):
         "24h": "24小时整体分析"
     }}
 }}
+
+生成reminder_message的要求：
+1. 必须符合当前人设的语言风格和性格特点
+2. 要自然、多样化，避免格式化的表达
+3. 同时提及具体时长（绝对值）和占比（相对值），如"你已经在飞书上浪费了2小时（占今天的80%）"
+4. 可以引用不同时段的对比，如"虽然过去5分钟在工作，但2小时内你有1.5小时在摸鱼"
+5. 根据偏离程度调整语气强度：
+   - 严重：强烈批评/命令（严厉主人）、尖锐讽刺（毒舌管家）、担忧焦虑（温柔伴侣）
+   - 中度：警告提醒（严厉主人）、嘲讽暗示（毒舌管家）、温和提醒（温柔伴侣）
+   - 轻微：冷淡提示（严厉主人）、轻微调侃（毒舌管家）、鼓励支持（温柔伴侣）
+6. 每次的表达方式要不同，可以用不同的角度、比喻、语气变化
+7. 可以具体指出问题应用和建议应用，如"关掉飞书，打开VS Code"
+8. 表情标记要与情绪匹配：<#1>开心 <#2>得意 <#3>无语 <#4>鄙视 <#5>平静 <#6>生气 <#7>暴怒
 
 决策规则：
 1. 如果5分钟数据显示用户正在做与目标相关的事情，即使2小时或24小时有偏离，也不要立即提醒
