@@ -104,9 +104,9 @@ jobs:
         )
         $readmeLines -join "`n" | Out-File -FilePath "$packageDir\README.txt" -Encoding UTF8
         
-        # Create ZIP
+        # Create ZIP (compress contents directly, not the folder)
         $zipPath = "dist\BaalPetAssistant-Windows.zip"
-        Compress-Archive -Path $packageDir -DestinationPath $zipPath -Force
+        Compress-Archive -Path "$packageDir\*" -DestinationPath $zipPath -Force
         
         if (Test-Path $zipPath) {
           $zipInfo = Get-Item $zipPath
