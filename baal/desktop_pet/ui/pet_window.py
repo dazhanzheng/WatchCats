@@ -299,6 +299,16 @@ class PetWindow(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.logger.debug("Window flags and attributes set")
         
+        # 设置窗口图标 - 使用 baallogo.png
+        icon_paths = [
+            Path(__file__).parent.parent.parent / "resources" / "baallogo.png",
+            Path(__file__).parent.parent.parent / "resources" / "cat.png"
+        ]
+        for icon_path in icon_paths:
+            if icon_path.exists():
+                self.setWindowIcon(QIcon(str(icon_path)))
+                break
+        
         # 获取宠物大小设置
         pet_size = self.config_manager.get_config().get('pet_size', 120)
         window_size = pet_size + 30  # 为设置按钮留出空间
@@ -449,11 +459,20 @@ class PetWindow(QWidget):
         # 创建系统托盘图标
         self.tray_icon = QSystemTrayIcon(self)
         
-        # 设置图标
-        icon_path = Path(__file__).parent.parent.parent / "resources" / "cat.png"
-        if icon_path.exists():
-            self.tray_icon.setIcon(QIcon(str(icon_path)))
-        else:
+        # 设置图标 - 优先使用 baallogo.png
+        icon_paths = [
+            Path(__file__).parent.parent.parent / "resources" / "baallogo.png",
+            Path(__file__).parent.parent.parent / "resources" / "cat.png"
+        ]
+        
+        icon_set = False
+        for icon_path in icon_paths:
+            if icon_path.exists():
+                self.tray_icon.setIcon(QIcon(str(icon_path)))
+                icon_set = True
+                break
+        
+        if not icon_set:
             # Windows和Mac使用不同的默认图标
             if sys.platform == "win32":
                 self.tray_icon.setIcon(self.style().standardIcon(self.style().StandardPixmap.SP_ComputerIcon))
