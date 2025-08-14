@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Convert PNG icon to ICO format for Windows
 """
@@ -6,6 +7,12 @@ Convert PNG icon to ICO format for Windows
 import os
 import sys
 from PIL import Image
+
+# Fix encoding issues on Windows
+if sys.platform == 'win32':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 def convert_png_to_ico(png_path, ico_path):
     """Convert PNG image to ICO format with multiple sizes"""
@@ -51,7 +58,8 @@ def main():
     for icon_path in possible_icons:
         if os.path.exists(icon_path):
             png_path = icon_path
-            print(f"Found icon at: {png_path}")
+            # Use repr() to safely print paths with unicode characters
+            print(f"Found icon at: {repr(png_path)}")
             break
     
     if not png_path:
