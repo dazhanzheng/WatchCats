@@ -49,17 +49,17 @@ echo 开始打包...
 pyinstaller --clean --noconfirm baal_windows.spec
 
 REM 检查构建结果
-if exist "dist\Baal宠物助手.exe" (
+if exist "dist\WatchCats.exe" (
     echo.
     echo ====================================
     echo 构建成功！
     echo ====================================
-    echo 可执行文件位置: dist\Baal宠物助手.exe
+    echo 可执行文件位置: dist\WatchCats.exe
     echo.
     echo 您可以：
-    echo 1. 直接运行 dist\Baal宠物助手.exe
-    echo 2. 将 dist 文件夹复制到其他电脑使用
-    echo 3. 使用 NSIS 或 Inno Setup 创建安装程序
+    echo 1. 直接运行 start.bat 启动程序
+    echo 2. 或直接运行 dist\WatchCats.exe
+    echo 3. 将 dist 文件夹复制到其他电脑使用
 ) else (
     echo.
     echo ====================================
