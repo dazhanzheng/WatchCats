@@ -46,16 +46,118 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install pyinstaller==6.11.1 pillow
+        
+        # Ensure Qt plugins are accessible
+        pip show PyQt6-Qt6 | Select-String "Location"
+        
+        # Force reinstall PyQt6 to ensure all components are present
+        pip uninstall -y PyQt6 PyQt6-Qt6 PyQt6-sip
+        pip install PyQt6==6.5.3 PyQt6-Qt6==6.5.3 PyQt6-sip==13.6.0
 
     - name: Convert icon
       run: |
         .\venv\Scripts\activate
         python convert_icon.py
 
+    - name: Verify Qt plugins before build
+      run: |
+        .\venv\Scripts\activate
+        python -c "
+        import os
+        import sys
+        from pathlib import Path
+        import PyQt6
+        
+        qt_path = Path(PyQt6.__file__).parent
+        plugins_path = qt_path / 'Qt6' / 'plugins'
+        
+        print(f'PyQt6 path: {qt_path}')
+        print(f'Plugins path: {plugins_path}')
+        
+        if plugins_path.exists():
+            platforms = plugins_path / 'platforms'
+            if platforms.exists():
+                dlls = list(platforms.glob('*.dll'))
+                print(f'Found {len(dlls)} platform DLLs:')
+                for dll in dlls:
+                    print(f'  - {dll.name}')
+                if not any('qwindows' in dll.name.lower() for dll in dlls):
+                    print('ERROR: qwindows.dll not found!')
+                    sys.exit(1)
+            else:
+                print('ERROR: platforms directory not found!')
+                sys.exit(1)
+        else:
+            print('ERROR: Qt plugins directory not found!')
+            sys.exit(1)
+        "
+
+    - name: Apply CI/CD fixes
+      run: |
+        .\venv\Scripts\activate
+        python ci_windows_fix.py
+        
     - name: Build with PyInstaller
       run: |
         .\venv\Scripts\activate
-        pyinstaller --clean --noconfirm baal_windows.spec
+        # Use CI-specific spec if it exists, otherwise use regular spec
+        if (Test-Path "baal_windows_ci.spec") {
+          Write-Host "Using CI-specific spec file"
+          pyinstaller --clean --noconfirm baal_windows_ci.spec
+        } else {
+          Write-Host "Using regular spec file"
+          pyinstaller --clean --noconfirm baal_windows.spec
+        }
+
+    - name: Verify build output
+      run: |
+        Write-Host "Checking build output..."
+        
+        # Check if exe exists
+        $exePath = Get-ChildItem -Path "dist" -Filter "*.exe" | Select-Object -First 1
+        if (-not $exePath) {
+          Write-Host "❌ No exe file found!"
+          exit 1
+        }
+        Write-Host "✅ Found exe: $($exePath.Name)"
+        
+        # Check for Qt plugins in dist
+        $qtPluginsPath = "dist\PyQt6\Qt6\plugins\platforms"
+        if (-not (Test-Path $qtPluginsPath)) {
+          # Try alternative paths
+          $altPaths = @(
+            "dist\_internal\PyQt6\Qt6\plugins\platforms",
+            "dist\PyQt6\plugins\platforms",
+            "dist\Qt6\plugins\platforms",
+            "dist\plugins\platforms"
+          )
+          $found = $false
+          foreach ($path in $altPaths) {
+            if (Test-Path $path) {
+              $qtPluginsPath = $path
+              $found = $true
+              break
+            }
+          }
+          if (-not $found) {
+            Write-Host "❌ Qt plugins not found in dist!"
+            Write-Host "Searching for any qwindows.dll..."
+            Get-ChildItem -Path "dist" -Filter "qwindows.dll" -Recurse | ForEach-Object {
+              Write-Host "  Found at: $($_.FullName)"
+            }
+          }
+        }
+        
+        if (Test-Path $qtPluginsPath) {
+          $qwindows = Join-Path $qtPluginsPath "qwindows.dll"
+          if (Test-Path $qwindows) {
+            Write-Host "✅ qwindows.dll found at: $qwindows"
+            $fileInfo = Get-Item $qwindows
+            Write-Host "   Size: $([math]::Round($fileInfo.Length / 1KB, 2)) KB"
+          } else {
+            Write-Host "⚠️ qwindows.dll not found in $qtPluginsPath"
+          }
+        }
 
     - name: Create ZIP Package
       run: |
@@ -75,6 +177,31 @@ jobs:
         # Copy main executable
         Copy-Item $exePath.FullName -Destination "$packageDir\$($exePath.Name)"
         
+        # CRITICAL: Copy Qt plugins if they exist in dist
+        $qtSourcePaths = @(
+          "dist\PyQt6",
+          "dist\_internal\PyQt6",
+          "dist\Qt6",
+          "dist\plugins"
+        )
+        
+        foreach ($sourcePath in $qtSourcePaths) {
+          if (Test-Path $sourcePath) {
+            Write-Host "Copying Qt files from $sourcePath"
+            $destPath = "$packageDir\$(Split-Path -Leaf $sourcePath)"
+            Copy-Item -Path $sourcePath -Destination $destPath -Recurse -Force
+          }
+        }
+        
+        # Ensure critical DLLs are included
+        $criticalDlls = Get-ChildItem -Path "dist" -Filter "*.dll" -File
+        foreach ($dll in $criticalDlls) {
+          if ($dll.Name -match "Qt6|qwindows|platform") {
+            Copy-Item $dll.FullName -Destination "$packageDir\$($dll.Name)" -Force
+            Write-Host "  Copied critical DLL: $($dll.Name)"
+          }
+        }
+        
         # Copy resources
         if (Test-Path "baal\resources") {
           Copy-Item -Path "baal\resources" -Destination "$packageDir\resources" -Recurse -Force
@@ -83,10 +210,14 @@ jobs:
           Copy-Item -Path "动作表情拆分" -Destination "$packageDir\动作表情拆分" -Recurse -Force
         }
         
-        # Create batch file for easy start
+        # Create batch file with Qt environment setup
         $batchLines = @(
           "@echo off",
           "echo Starting Baal Pet Assistant...",
+          "REM Set Qt plugin paths for safety",
+          'set QT_PLUGIN_PATH=%~dp0PyQt6\Qt6\plugins;%~dp0Qt6\plugins;%~dp0plugins',
+          'set QT_QPA_PLATFORM_PLUGIN_PATH=%~dp0PyQt6\Qt6\plugins\platforms;%~dp0Qt6\plugins\platforms;%~dp0plugins\platforms',
+          "set QT_OPENGL=angle",
           'start "" "%~dp0Baal宠物助手.exe"'
         )
         $batchLines -join "`r`n" | Out-File -FilePath "$packageDir\Start.bat" -Encoding ASCII
