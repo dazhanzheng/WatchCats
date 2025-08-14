@@ -11,10 +11,37 @@ binaries = []
 
 # 收集 PyQt6 平台插件和依赖
 from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
+from PyInstaller.utils.hooks.qt import qt_plugins_binaries
+
 qt6_datas = collect_data_files('PyQt6')
 qt6_binaries = collect_dynamic_libs('PyQt6')
 datas += qt6_datas
 binaries += qt6_binaries
+
+# 关键修复：确保包含所有 Qt 平台插件（这是 Windows 闪退的主要原因）
+try:
+    # 收集平台插件（必须，否则 Windows 会闪退）
+    qt6_platforms = qt_plugins_binaries('platforms', 'PyQt6')
+    binaries += qt6_platforms
+    
+    # 收集样式插件（推荐）
+    qt6_styles = qt_plugins_binaries('styles', 'PyQt6')
+    binaries += qt6_styles
+    
+    # 收集图像格式插件（处理图标和图片）
+    qt6_imageformats = qt_plugins_binaries('imageformats', 'PyQt6')
+    binaries += qt6_imageformats
+    
+    print("✓ Qt6 platform plugins collected successfully")
+except Exception as e:
+    print(f"Warning: Could not collect Qt6 plugins: {e}")
+    # 手动添加关键的 Windows 平台插件
+    import PyQt6
+    import os
+    qt6_path = os.path.dirname(PyQt6.__file__)
+    platforms_path = os.path.join(qt6_path, 'Qt6', 'plugins', 'platforms')
+    if os.path.exists(platforms_path):
+        binaries += [(os.path.join(platforms_path, '*.dll'), 'PyQt6/Qt6/plugins/platforms')]
 
 # 收集 aw-client 和 aw-core 模块
 aw_client_datas, aw_client_binaries, aw_client_hiddenimports = collect_all('aw_client')
@@ -90,7 +117,7 @@ a = Analysis(
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=['runtime_hook_pyqt6.py'],  # 添加运行时钩子，修复 Qt 插件路径问题
     excludes=[
         'tkinter',
         'matplotlib',

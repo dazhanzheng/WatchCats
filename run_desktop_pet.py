@@ -25,20 +25,60 @@ try:
     # 设置环境变量
     os.environ['PYTHONWARNINGS'] = 'ignore:Unverified HTTPS request'
     
-    # 创建未验证的 SSL 上下文（仅在开发环境使用）
-    ssl._create_default_https_context = ssl._create_unverified_context
+    # SSL 配置：仅在开发模式或显式设置时禁用验证
+    # 生产环境应该使用正确的 SSL 证书
+    if os.environ.get('BAAL_DEV_MODE', '').lower() == 'true' or \
+       os.environ.get('DISABLE_SSL_VERIFY', '').lower() == 'true':
+        print("Warning: SSL verification disabled (development mode)")
+        ssl._create_default_https_context = ssl._create_unverified_context
+    else:
+        # 生产环境：使用默认的 SSL 验证
+        pass
 except:
     pass
 
-# 初始化日志系统
+# 修复：延迟初始化日志系统，避免在冻结环境中过早创建文件
+logger = None
 try:
+    # 在冻结环境中确保临时目录存在
+    if getattr(sys, 'frozen', False):
+        import tempfile
+        from pathlib import Path
+        temp_dir = Path(tempfile.gettempdir())
+        temp_dir.mkdir(exist_ok=True, parents=True)
+        
+        # 为日志创建一个专用目录
+        log_dir = temp_dir / 'BaalPet'
+        log_dir.mkdir(exist_ok=True, parents=True)
+        os.environ['BAAL_LOG_DIR'] = str(log_dir)
+    
+    # 现在可以安全地初始化日志系统
     from baal.desktop_pet.core.logger_config import init_logging, get_logger
     init_logging(console_level='INFO')
     logger = get_logger('run_desktop_pet')
     logger.info("Starting Baal Desktop Pet application")
+    logger.info(f"Python version: {sys.version}")
+    logger.info(f"Frozen: {getattr(sys, 'frozen', False)}")
+    if hasattr(sys, '_MEIPASS'):
+        logger.info(f"Bundle path: {sys._MEIPASS}")
 except Exception as e:
+    # 不要让日志失败阻止程序启动
     print(f"Warning: Could not initialize logging system: {e}")
+    print("Continuing without logging...")
     logger = None
+
+# 运行预检查（仅在 Windows 打包环境或调试模式下）
+if getattr(sys, 'frozen', False) or os.environ.get('BAAL_DEBUG', '').lower() == 'true':
+    try:
+        from baal.desktop_pet.core.preflight_check import run_preflight_check, get_diagnostic_info
+        if not run_preflight_check():
+            print("\n" + get_diagnostic_info())
+            if sys.platform == 'win32' and getattr(sys, 'frozen', False):
+                print("\nPress Enter to exit...")
+                input()
+                sys.exit(1)
+    except Exception as e:
+        print(f"Warning: Preflight check failed: {e}")
 
 # 导入主程序
 try:
