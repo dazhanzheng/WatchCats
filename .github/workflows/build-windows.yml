@@ -118,10 +118,10 @@ jobs:
         # Check if exe exists
         $exePath = Get-ChildItem -Path "dist" -Filter "*.exe" | Select-Object -First 1
         if (-not $exePath) {
-          Write-Host "❌ No exe file found!"
+          Write-Host "[ERROR] No exe file found!"
           exit 1
         }
-        Write-Host "✅ Found exe: $($exePath.Name)"
+        Write-Host "[OK] Found exe: $($exePath.Name)"
         Write-Host "  Size: $([math]::Round($exePath.Length / 1MB, 2)) MB"
         
         # Check for Qt plugins in dist
@@ -143,7 +143,7 @@ jobs:
             }
           }
           if (-not $found) {
-            Write-Host "❌ Qt plugins not found in dist!"
+            Write-Host "[ERROR] Qt plugins not found in dist!"
             Write-Host "Searching for any qwindows.dll..."
             Get-ChildItem -Path "dist" -Filter "qwindows.dll" -Recurse | ForEach-Object {
               Write-Host "  Found at: $($_.FullName)"
@@ -154,11 +154,11 @@ jobs:
         if (Test-Path $qtPluginsPath) {
           $qwindows = Join-Path $qtPluginsPath "qwindows.dll"
           if (Test-Path $qwindows) {
-            Write-Host "✅ qwindows.dll found at: $qwindows"
+            Write-Host "[OK] qwindows.dll found at: $qwindows"
             $fileInfo = Get-Item $qwindows
             Write-Host "   Size: $([math]::Round($fileInfo.Length / 1KB, 2)) KB"
           } else {
-            Write-Host "⚠️ qwindows.dll not found in $qtPluginsPath"
+            Write-Host "[WARNING] qwindows.dll not found in $qtPluginsPath"
           }
         }
 
@@ -181,7 +181,7 @@ jobs:
         # Find the exe
         $exePath = Get-ChildItem -Path "dist" -Filter "*.exe" | Select-Object -First 1
         if (-not $exePath) {
-          Write-Host "❌ No exe file found!"
+          Write-Host "[ERROR] No exe file found!"
           exit 1
         }
         
@@ -268,7 +268,7 @@ jobs:
         
         if (Test-Path $zipPath) {
           $zipInfo = Get-Item $zipPath
-          Write-Host "✅ ZIP package created: $($zipInfo.Name)"
+          Write-Host "[OK] ZIP package created: $($zipInfo.Name)"
           Write-Host "   Size: $([math]::Round($zipInfo.Length / 1MB, 2)) MB"
         }
 

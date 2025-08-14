@@ -10,6 +10,12 @@ import sys
 import shutil
 from pathlib import Path
 
+# 设置UTF-8编码输出（解决Windows编码问题）
+if sys.platform == 'win32':
+    import codecs
+    sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'replace')
+    sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'replace')
+
 def fix_pyinstaller_spec():
     """动态修改 spec 文件以适应 CI 环境"""
     
@@ -21,9 +27,9 @@ def fix_pyinstaller_spec():
     try:
         import PyQt6
         pyqt6_path = Path(PyQt6.__file__).parent
-        print(f"✓ Found PyQt6 at: {pyqt6_path}")
+        print(f"[OK] Found PyQt6 at: {pyqt6_path}")
     except ImportError:
-        print("✗ PyQt6 not found! Installing...")
+        print("[ERROR] PyQt6 not found! Installing...")
         os.system("pip install PyQt6==6.5.3")
         import PyQt6
         pyqt6_path = Path(PyQt6.__file__).parent
@@ -40,11 +46,11 @@ def fix_pyinstaller_spec():
     for path in plugin_paths:
         if path.exists():
             qt_plugins_path = path
-            print(f"✓ Found Qt plugins at: {qt_plugins_path}")
+            print(f"[OK] Found Qt plugins at: {qt_plugins_path}")
             break
     
     if not qt_plugins_path:
-        print("✗ Qt plugins not found!")
+        print("[ERROR] Qt plugins not found!")
         # 尝试通过 pip show 查找
         import subprocess
         result = subprocess.run(
@@ -59,15 +65,15 @@ def fix_pyinstaller_spec():
     # 3. 验证平台插件
     platforms_path = qt_plugins_path / "platforms"
     if not platforms_path.exists():
-        print(f"✗ Platforms directory not found: {platforms_path}")
+        print(f"[ERROR] Platforms directory not found: {platforms_path}")
         sys.exit(1)
     
     qwindows_dll = platforms_path / "qwindows.dll"
     if not qwindows_dll.exists():
-        print(f"✗ qwindows.dll not found: {qwindows_dll}")
+        print(f"[ERROR] qwindows.dll not found: {qwindows_dll}")
         sys.exit(1)
     
-    print(f"✓ qwindows.dll found: {qwindows_dll}")
+    print(f"[OK] qwindows.dll found: {qwindows_dll}")
     print(f"  Size: {qwindows_dll.stat().st_size / 1024:.2f} KB")
     
     # 4. 生成 CI 专用的 spec 文件
@@ -194,7 +200,7 @@ exe = EXE(
     with open("baal_windows_ci.spec", "w", encoding="utf-8") as f:
         f.write(ci_spec_content)
     
-    print("✓ Created baal_windows_ci.spec")
+    print("[OK] Created baal_windows_ci.spec")
     
     # 5. 创建运行时环境设置脚本
     runtime_fix = '''import os
@@ -231,7 +237,7 @@ if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
     with open("runtime_hook_ci.py", "w", encoding="utf-8") as f:
         f.write(runtime_fix)
     
-    print("✓ Created runtime_hook_ci.py")
+    print("[OK] Created runtime_hook_ci.py")
     
     print("\n" + "=" * 60)
     print("CI/CD fixes applied successfully!")
