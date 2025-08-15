@@ -15,6 +15,7 @@ from ...llm_assistant.binary_intent_classifier import BinaryIntentClassifier
 from ...aw_stats import StatsProcessor
 from .logger_config import get_logger, log_performance, log_api_call
 from .persona_manager import PersonaManager, PersonaLevel
+from .preset_dialogues import PresetDialogues
 
 
 class LLMHandler:
@@ -168,7 +169,7 @@ class LLMHandler:
             return response.content
         except Exception as e:
             self.logger.error(f"Failed to generate Baal response: {e}", exc_info=True)
-            return "<#6>系统出错了，本座很不高兴。"
+            return PresetDialogues.get_error_message(self.persona_manager.current_level, "system_error")
     
     def set_char_delays(self, normal: float = None, punctuation: float = None, newline: float = None):
         """
@@ -224,7 +225,7 @@ class LLMHandler:
             return response.content
         except Exception as e:
             self.logger.error(f"Failed to generate chat response: {e}", exc_info=True)
-            return "<#6>回复生成失败，本座很不满。"
+            return PresetDialogues.get_error_message(self.persona_manager.current_level, "chat_error")
     
     async def _parallel_all_operations(self, user_input: str) -> Dict[str, Any]:
         """
@@ -519,7 +520,7 @@ class LLMHandler:
             self.logger.debug(f"Response preview: {response.content[:100]}...")
             return response.content
         except Exception as e:
-            error_msg = f"对话出错了: {str(e)}"
+            error_msg = PresetDialogues.get_error_message(self.persona_manager.current_level, "general_error")
             self.logger.error(f"Synchronous chat failed: {e}", exc_info=True)
             return error_msg
     

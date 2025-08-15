@@ -1014,10 +1014,21 @@ class PetWindow(QWidget):
                 self.update()
             
             # 检查人设是否改变
-            if new_persona_level != old_persona_level and self.llm_handler:
+            if new_persona_level != old_persona_level:
                 # 切换人设
                 persona_level = PersonaLevel(new_persona_level)
-                self.llm_handler.set_persona_level(persona_level)
+                
+                # 更新人设管理器
+                self.persona_manager.set_persona_level(persona_level)
+                
+                # 更新LLM处理器的人设
+                if self.llm_handler:
+                    self.llm_handler.set_persona_level(persona_level)
+                
+                # 更新监督模式的人设管理器引用
+                if hasattr(self, 'supervision_mode') and self.supervision_mode:
+                    self.supervision_mode.persona_manager = self.persona_manager
+                
                 self.logger.info(f"Persona level changed to: {persona_level.name}")
             
             # 如果LLM未初始化或API密钥改变，重新初始化
@@ -1035,7 +1046,8 @@ class PetWindow(QWidget):
                         newline=delays.get('newline', 0.05)
                     )
             
-            if self.config_manager.is_configured():
+            # 如果人设改变且API已配置，显示对应的反应
+            if new_persona_level != old_persona_level and self.config_manager.is_configured():
                 response = PresetResponseManager.get_response(
                     self.persona_manager.current_level,
                     "api_configured"

@@ -476,20 +476,23 @@ class SettingsDialog(QDialog):
     
     def _update_persona_description(self, persona_level):
         """更新人设描述显示"""
+        # 使用PersonaLevel枚举值来匹配
+        from ..core.persona_manager import PersonaLevel
+        
         descriptions = {
-            1: """【严厉主人档】
+            PersonaLevel.STRICT_MASTER.value: """【严厉主人档】
 巴利将以绝对的主人身份监管你。
 - 称呼你为"仆人"或"奴隶"
 - 语气冷酷威严，充满命令
 - 发现偷懒立即严厉责罚
 - 对努力工作给予轻蔑的认可""",
-            2: """【毒舌管家档】
+            PersonaLevel.SARCASTIC_BUTLER.value: """【毒舌管家档】
 巴利是你名义上的管家，实则充满优越感。
 - 表面称呼你为"主人"
 - 语气恭敬但充满讽刺
 - 用"善意"的提醒来嘲弄你
 - 让你感受到智商被碾压""",
-            3: """【温顺伴侣档】
+            PersonaLevel.GENTLE_COMPANION.value: """【温顺伴侣档】
 巴利是你最贴心的伴侣和朋友。
 - 称呼你为"亲爱的"
 - 语气温柔充满关怀
