@@ -427,9 +427,9 @@ class PetWindow(QWidget):
             self.current_emotion_pixmap = self.emotion_manager.get_emotion_pixmap(emotion_tag)
             self.update()  # 触发重绘
             
-            # 重置表情恢复计时器（10秒后恢复到默认表情）
+            # 重置表情恢复计时器（20秒后恢复到默认表情，与气泡相同）
             self.emotion_reset_timer.stop()
-            self.emotion_reset_timer.start(10000)  # 10秒
+            self.emotion_reset_timer.start(20000)  # 20秒，与气泡自动隐藏时间一致
             
             self.logger.info(f"Emotion changed from {old_emotion} to {emotion_tag}")
         elif emotion_tag == self.current_emotion:
@@ -919,9 +919,9 @@ class PetWindow(QWidget):
         self.logger.info("Stream output finished")
         self.chat_bubble.end_stream()
         
-        # 启动表情恢复计时器（10秒后恢复默认表情）
+        # 启动表情恢复计时器（20秒后恢复默认表情，与气泡相同）
         self.emotion_reset_timer.stop()
-        self.emotion_reset_timer.start(10000)
+        self.emotion_reset_timer.start(20000)  # 20秒
     
     def _on_error_occurred(self, error: str):
         """处理错误"""
@@ -1615,6 +1615,12 @@ class PetWindow(QWidget):
         if self.chat_bubble.isVisible():
             self._start_bubble_auto_hide_timer()
             self.logger.debug("用户交互，重置自动隐藏计时器")
+        
+        # 同时重置表情计时器（保持表情和气泡同步）
+        if self.current_emotion != "<#5>":  # 如果不是默认表情
+            self.emotion_reset_timer.stop()
+            self.emotion_reset_timer.start(20000)  # 20秒
+            self.logger.debug("用户交互，重置表情计时器")
     
     def _on_supervision_reminder(self, context: dict):
         """处理监督模式提醒"""
@@ -1682,6 +1688,9 @@ class PetWindow(QWidget):
         if message.startswith("<#"):
             self._update_emotion(message[:4])
             message = message[4:].strip()
+            # 监督提醒时，表情持续时间与气泡相同（30秒）
+            self.emotion_reset_timer.stop()
+            self.emotion_reset_timer.start(30000)  # 30秒，与监督提醒气泡时间一致
         
         # 根据偏离程度设置显示时长
         duration = 15000 if deviation_level == '严重' else 10000
