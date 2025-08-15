@@ -395,6 +395,7 @@ class LLMHandler:
         
         # 根据意图决定是否启动工具任务
         stats_task = None
+        stats_data = None  # 初始化 stats_data 变量
         
         if intent_decision['needs_stats']:
             stats_task = asyncio.create_task(get_stats())
@@ -425,6 +426,7 @@ class LLMHandler:
             for task_name, task in tasks_to_wait:
                 result = await task
                 if task_name == 'stats':
+                    stats_data = result  # 保存统计数据结果
                     tool_context += f"\n\n【活动监控数据】\n{result}"
                 elif task_name == 'schedule':
                     tool_context += f"\n\n【日程数据】\n{result}"
