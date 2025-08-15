@@ -48,9 +48,10 @@ def main():
     
     # Try different possible icon locations
     possible_icons = [
+        os.path.join(script_dir, "baal", "resources", "baallogo.png"),  # Primary icon
+        os.path.join(script_dir, "baal", "resources", "baal_logo.png"),  # Alternative name
         os.path.join(script_dir, "baal", "resources", "app_icon.png"),
         os.path.join(script_dir, "baal", "resources", "icon.png"),
-        os.path.join(script_dir, "动作表情拆分", "正常.png"),  # Use normal expression as fallback
     ]
     
     # Find the first existing icon
