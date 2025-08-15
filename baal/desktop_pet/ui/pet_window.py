@@ -1653,6 +1653,11 @@ class PetWindow(QWidget):
         if reminder_message:
             # 使用LLM生成的消息
             message = reminder_message
+            # 清理可能存在的重复前缀
+            if message.startswith('Baal：') or message.startswith('Baal:'):
+                message = message[5:].strip()
+            elif message.startswith('巴利：') or message.startswith('巴利:'):
+                message = message[3:].strip()
         else:
             # 后备消息（如果LLM评估失败）
             # 使用预设反应管理器根据人设和偏离程度生成提醒

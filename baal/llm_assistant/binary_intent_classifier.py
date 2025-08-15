@@ -28,6 +28,7 @@ class BinaryIntentClassifier:
             llm: LangChain LLM 实例
         """
         self.llm = llm
+        self.conversation_history = []  # 存储最近的对话历史
         
         # 构建提示词
         self.prompt = ChatPromptTemplate.from_messages([
@@ -52,17 +53,29 @@ class BinaryIntentClassifier:
         # 构建链
         self.chain = self.prompt | self.llm
     
-    def classify(self, user_input: str) -> str:
+    def classify(self, user_input: str, conversation_history=None) -> str:
         """
         分类用户输入
         
         Args:
             user_input: 用户输入文本
+            conversation_history: 可选的对话历史
             
         Returns:
             str: 3位二进制字符串
         """
-        response = self.chain.invoke({"input": user_input})
+        # 构建带上下文的输入
+        context = ""
+        if conversation_history and len(conversation_history) > 0:
+            # 获取最近3轮对话作为上下文
+            recent_messages = conversation_history[-6:]  # 最多3轮对话
+            for msg in recent_messages:
+                if hasattr(msg, 'content'):
+                    role = "用户" if msg.__class__.__name__ == 'HumanMessage' else "AI"
+                    context += f"{role}: {msg.content}\n"
+        
+        full_input = context + f"当前用户输入: {user_input}"
+        response = self.chain.invoke({"input": full_input})
         
         # 提取内容
         if hasattr(response, 'content'):

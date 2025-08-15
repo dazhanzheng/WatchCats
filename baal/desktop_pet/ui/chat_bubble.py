@@ -176,6 +176,8 @@ class ChatBubble(QWidget):
             }
         """)
         self.input_field.returnPressed.connect(self._on_send_message)
+        # 监听文本变化，用户打字时发送交互信号
+        self.input_field.textChanged.connect(self._on_text_changed)
         
         layout.addWidget(self.input_field)
     
@@ -547,6 +549,11 @@ class ChatBubble(QWidget):
             
             # 发送信号
             self.message_sent.emit(message)
+    
+    def _on_text_changed(self, text):
+        """输入框文本变化时触发"""
+        if text:  # 只有当有文本时才发送信号
+            self.user_interaction.emit()
     
     def set_status(self, status: str):
         """设置当前状态

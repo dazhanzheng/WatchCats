@@ -340,7 +340,8 @@ class LLMHandler:
                 binary_str = await asyncio.get_event_loop().run_in_executor(
                     None,
                     self.intent_classifier.classify,
-                    user_input
+                    user_input,
+                    self.messages  # 传递对话历史
                 )
                 
                 # 解析二进制结果
@@ -464,13 +465,19 @@ class LLMHandler:
         
         await asyncio.gather(*tasks_to_wait_final, return_exceptions=True)
         
+        # 构建包含工具调用信息的完整响应
+        full_response = final_response
+        if stats_data and stats_data not in ['统计查询失败', '工具错误', '未匹配']:
+            # 将工具调用的结果作为系统信息添加到响应中
+            full_response = f"{final_response}\n[数据查询结果：{stats_data}]"
+        
         # 添加到对话历史
         self.messages.append(HumanMessage(content=user_input))
-        self.messages.append(AIMessage(content=final_response))
+        self.messages.append(AIMessage(content=full_response))
         
         # 同步更新 assistant 的对话历史以触发总结功能
         self.assistant.conversation_history.append(HumanMessage(content=user_input))
-        self.assistant.conversation_history.append(AIMessage(content=final_response))
+        self.assistant.conversation_history.append(AIMessage(content=full_response))
         
         # 检查是否需要生成总结
         if self.assistant._should_generate_summary():
