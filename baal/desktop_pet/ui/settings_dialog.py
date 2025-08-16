@@ -7,7 +7,8 @@
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, 
                              QLabel, QLineEdit, QPushButton, 
                              QMessageBox, QGroupBox, QSlider, QSpinBox,
-                             QComboBox, QTextEdit)
+                             QComboBox, QTextEdit, QScrollArea, QWidget,
+                             QApplication)
 from PyQt6.QtCore import Qt
 from typing import Optional
 from ..core.persona_manager import PersonaLevel
@@ -30,7 +31,19 @@ class SettingsDialog(QDialog):
         # 设置窗口属性
         self.setWindowTitle("设置")
         self.setModal(True)
-        self.setFixedSize(500, 800)  # 增加高度以容纳所有设置包括人设
+        
+        # 获取屏幕可用高度，并设置合适的窗口大小
+        screen = QApplication.primaryScreen()
+        available_rect = screen.availableGeometry()
+        
+        # 设置最大高度为屏幕可用高度的90%，留出任务栏空间
+        max_height = int(available_rect.height() * 0.85)
+        # 如果800像素超过最大高度，使用最大高度，否则使用800
+        window_height = min(800, max_height)
+        # 最小高度为600，确保内容可以显示
+        window_height = max(600, window_height)
+        
+        self.setFixedSize(500, window_height)
         
         # 设置窗口标志
         self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.WindowCloseButtonHint)
@@ -43,7 +56,19 @@ class SettingsDialog(QDialog):
     
     def _init_ui(self):
         """初始化UI"""
-        layout = QVBoxLayout(self)
+        # 主布局
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        
+        # 创建滚动区域
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        
+        # 创建内容容器
+        content_widget = QWidget()
+        layout = QVBoxLayout(content_widget)
         layout.setSpacing(12)
         layout.setContentsMargins(20, 20, 20, 20)
         
@@ -335,26 +360,43 @@ class SettingsDialog(QDialog):
         info_label.setStyleSheet("color: #666666; font-size: 12px;")
         layout.addWidget(info_label)
         
-        # 添加弹性空间
-        layout.addStretch()
+        # 不需要弹性空间了，因为滚动区域会自动处理
+        # layout.addStretch()
         
-        # 按钮布局
-        button_layout = QHBoxLayout()
+        # 将内容容器设置到滚动区域
+        scroll_area.setWidget(content_widget)
+        
+        # 将滚动区域添加到主布局
+        main_layout.addWidget(scroll_area)
+        
+        # 创建按钮容器（固定在底部，不随滚动）
+        button_container = QWidget()
+        button_container.setStyleSheet("""
+            QWidget {
+                background-color: #f5f5f5;
+                border-top: 1px solid #ddd;
+            }
+        """)
+        button_layout = QHBoxLayout(button_container)
+        button_layout.setContentsMargins(20, 10, 20, 10)
         button_layout.addStretch()
         
         # 保存按钮
         self.save_btn = QPushButton("保存")
         self.save_btn.clicked.connect(self._save_config)
         self.save_btn.setDefault(True)
+        self.save_btn.setMinimumWidth(80)
         
         # 取消按钮
         self.cancel_btn = QPushButton("取消")
         self.cancel_btn.clicked.connect(self.reject)
+        self.cancel_btn.setMinimumWidth(80)
         
         button_layout.addWidget(self.save_btn)
         button_layout.addWidget(self.cancel_btn)
         
-        layout.addLayout(button_layout)
+        # 将按钮容器添加到主布局底部
+        main_layout.addWidget(button_container)
     
     def _load_config(self):
         """加载当前配置"""
