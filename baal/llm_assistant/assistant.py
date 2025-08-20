@@ -241,6 +241,8 @@ class LLMAssistant:
                     result = processor.get_stats_7d()
                 elif parsed_command.method == "get_stats_1d":
                     result = processor.get_stats_1d()
+                elif parsed_command.method == "get_stats_today":
+                    result = processor.get_stats_today()
                 elif parsed_command.method == "get_stats_2h":
                     result = processor.get_stats_2h()
                 elif parsed_command.method == "get_stats_30m":

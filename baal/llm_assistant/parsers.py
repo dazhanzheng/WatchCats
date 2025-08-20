@@ -21,6 +21,7 @@ class ParsedStatsCommand(BaseModel):
         "get_detailed_stats", 
         "get_stats_7d",
         "get_stats_1d",
+        "get_stats_today",
         "get_stats_2h",
         "get_stats_30m",
         "get_stats_5m"
@@ -58,12 +59,18 @@ class StatsCommandParser:
 
 可用的方法及其参数：
 1. get_stats_7d() - 获取7天的聚合统计
-2. get_stats_1d() - 获取1天的聚合统计  
-3. get_stats_2h() - 获取2小时的详细统计
-4. get_stats_30m() - 获取30分钟的详细统计
-5. get_stats_5m() - 获取5分钟的详细统计
-6. get_aggregated_stats(days: int) - 获取指定天数的聚合统计
-7. get_detailed_stats(hours: float) - 获取指定小时数的详细统计
+2. get_stats_1d() - 获取过去24小时的聚合统计
+3. get_stats_today() - 获取今天（从凌晨4点开始）的聚合统计
+4. get_stats_2h() - 获取2小时的详细统计
+5. get_stats_30m() - 获取30分钟的详细统计
+6. get_stats_5m() - 获取5分钟的详细统计
+7. get_aggregated_stats(days: int) - 获取指定天数的聚合统计
+8. get_detailed_stats(hours: float) - 获取指定小时数的详细统计
+
+重要：
+- 当用户询问「今天」、「今日」时，使用 get_stats_today()（从凌晨4点开始计算）
+- 当用户询问「最近24小时」时，使用 get_stats_1d()（从当前时间往前24小时）
+- 当用户询问「昨天」时，计算昨天凌晨4点到今天凌晨4点的数据
 
 聚合统计：显示应用使用时长排行和占比
 详细统计：显示原始事件流和聚合统计

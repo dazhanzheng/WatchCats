@@ -416,7 +416,7 @@ class StatsProcessor:
             今日活动的统计摘要
         """
         try:
-            now = datetime.now()
+            now = datetime.now(timezone.utc)
             # 确定今日的开始时间（凌晨4点）
             if now.hour < 4:
                 # 如果现在是凌晨0-4点，算作昨天
@@ -424,15 +424,39 @@ class StatsProcessor:
             else:
                 start_date = now.date()
             
+            # 设置开始时间为凌晨4点
             start_time = datetime.combine(start_date, datetime.min.time().replace(hour=4))
             start_time = start_time.replace(tzinfo=timezone.utc)
-            end_time = datetime.now(timezone.utc)
+            end_time = now
             
             # 计算时长（小时）
             hours = (end_time - start_time).total_seconds() / 3600
             
-            # 使用现有的聚合统计方法
-            return self.get_aggregated_stats(hours / 24)  # 转换为天数
+            # 获取今天的事件
+            events = self._get_events_for_period(hours)
+            stats = self._process_events_to_stats(events, top_n=20)
+            
+            # 生成自然语言描述
+            current_time = datetime.now().strftime("%Y年%m月%d日 %H:%M:%S")
+            
+            if not events:
+                return f"当前时间是{current_time}，今日（从凌晨4点开始）暂无活动数据。"
+                
+            # 构建应用列表描述
+            app_descriptions = []
+            for i, app_info in enumerate(stats["top_apps"], 1):
+                app_desc = f"{i}. {app_info['app']}（{app_info['duration_str']}，占比{app_info['percentage']}%）"
+                app_descriptions.append(app_desc)
+                
+            app_list = "\n".join(app_descriptions)
+            
+            return (
+                f"当前时间是{current_time}，"
+                f"今日（从凌晨4点开始）统计数据：\n"
+                f"总统计活跃时长{stats['total_duration_str']}，"
+                f"共记录{stats['event_count']}个事件。\n"
+                f"其中前{len(stats['top_apps'])}个活跃的应用是：\n{app_list}"
+            )
         except Exception as e:
             self.logger.error(f"Failed to get today stats: {e}")
             return "无法获取今日统计数据" 
