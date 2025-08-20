@@ -338,7 +338,12 @@ class ChatBubble(QWidget):
                 if msg_type == "user":
                     colored_text = f'<div style="margin: 5px 0;"><span style="color: #006400; font-weight: bold;">你: </span><span style="color: #333;">{text[3:]}</span></div>'
                 else:
-                    colored_text = f'<div style="margin: 5px 0;"><span style="color: #8B008B; font-weight: bold;">Baal: </span><span style="color: #333;">{text}</span></div>'
+                    # 如果文本已经以 'Baal:' 或 'Baal：' 开头，不再添加
+                    if text.startswith('Baal:') or text.startswith('Baal：'):
+                        display_text = text[5:].strip()  # 移除 'Baal:' 或 'Baal：'
+                    else:
+                        display_text = text
+                    colored_text = f'<div style="margin: 5px 0;"><span style="color: #8B008B; font-weight: bold;">Baal: </span><span style="color: #333;">{display_text}</span></div>'
                 
                 self.text_display.append(colored_text)
         else:
@@ -352,7 +357,13 @@ class ChatBubble(QWidget):
                     if self.current_status in ["thinking", "tools"] and not self.current_text[6:].strip():
                         colored_text = f'<span style="color: #8B008B; font-weight: bold;">Baal: </span>{status_icon_html}'
                     else:
-                        colored_text = f'<span style="color: #8B008B; font-weight: bold;">Baal: </span><span style="color: #333;">{self.current_text[6:]}</span>'
+                        # 检查当前文本是否已经包含 'Baal:' 前缀
+                        if self.current_text.startswith('Baal:') or self.current_text.startswith('Baal：'):
+                            # 移除前缀
+                            display_text = self.current_text[5:].strip()
+                        else:
+                            display_text = self.current_text
+                        colored_text = f'<span style="color: #8B008B; font-weight: bold;">Baal: </span><span style="color: #333;">{display_text}</span>'
                 self.text_display.append(colored_text)
             elif self.conversation_history:
                 # 显示最后一条历史消息
@@ -363,7 +374,12 @@ class ChatBubble(QWidget):
                 if msg_type == "user":
                     colored_text = f'<span style="color: #006400; font-weight: bold;">你: </span><span style="color: #333;">{text[3:]}</span>'
                 else:
-                    colored_text = f'<span style="color: #8B008B; font-weight: bold;">Baal: </span><span style="color: #333;">{text}</span>'
+                    # 如果文本已经以 'Baal:' 或 'Baal：' 开头，不再添加
+                    if text.startswith('Baal:') or text.startswith('Baal：'):
+                        display_text = text[5:].strip()  # 移除 'Baal:' 或 'Baal：'
+                    else:
+                        display_text = text
+                    colored_text = f'<span style="color: #8B008B; font-weight: bold;">Baal: </span><span style="color: #333;">{display_text}</span>'
                 self.text_display.append(colored_text)
             elif self.current_status in ["thinking", "tools"]:
                 # 如果没有消息但正在处理，显示状态

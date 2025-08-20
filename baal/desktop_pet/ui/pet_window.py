@@ -827,43 +827,28 @@ class PetWindow(QWidget):
     def mouseDoubleClickEvent(self, event):
         """鼠标双击事件"""
         if event.button() == Qt.MouseButton.LeftButton:
-            self.double_click_count += 1
-            self.logger.info(f"Double click event #{self.double_click_count}")
+            # 双击左键直接唤出聊天窗口
+            self.logger.info("Double click event - showing chat bubble")
             
-            if self.double_click_count == 1:
-                # 第一次：基本不耐烦
-                response = PresetResponseManager.get_response(
-                    self.persona_manager.current_level,
-                    "left_click_warning"
-                )
-                if response.startswith("<#"):
-                    self._update_emotion(response[:4])
-                    response = response[4:].strip()
-                self.chat_bubble.show_message(response)
-                self.logger.debug("First double-click: basic annoyance message")
-            elif self.double_click_count == 2:
-                # 第二次：更加不耐烦
-                self.chat_bubble.show_message("哼...又来这一套？我已经说过了，右键。还是你的大脑无法理解这么简单的指令？")
-                self.logger.debug("Second double-click: increased annoyance")
-            elif self.double_click_count == 3:
-                # 第三次：非常不耐烦
-                response = PresetResponseManager.get_response(
-                    self.persona_manager.current_level,
-                    "repeated_left_click"
-                )
-                if response.startswith("<#"):
-                    self._update_emotion(response[:4])
-                    response = response[4:].strip()
-                self.chat_bubble.show_message(response)
-                self.logger.debug("Third double-click: final warning")
-            elif self.double_click_count >= 4:
-                # 第四次及以后：如果气泡打开，则关闭它；否则不回应
-                if self.chat_bubble.isVisible():
-                    self.chat_bubble.hide()
-                    self.logger.debug("Fourth+ double-click: hiding chat bubble")
-                else:
-                    self.logger.debug("Fourth+ double-click: ignoring (silent treatment)")
-                # 如果气泡未打开，则什么都不做（保持沉默）
+            # 显示随机的双击招呼语
+            greeting = PresetResponseManager.get_response(
+                self.persona_manager.current_level,
+                "double_click_greeting"
+            )
+            if greeting.startswith("<#"):
+                self._update_emotion(greeting[:4])
+                greeting = greeting[4:].strip()
+            
+            # 显示聊天窗口和招呼语
+            if not self.chat_bubble.isVisible():
+                self.chat_bubble.show()
+                self.chat_bubble.raise_()
+                self.chat_bubble.set_position_relative_to(self, use_offset=True)
+                self._start_bubble_auto_hide_timer()
+            
+            self.chat_bubble.show_message(greeting)
+            self.chat_bubble.input_field.setFocus()
+            self.logger.info("Chat bubble shown with greeting")
     
     @log_ui_event("show_chat_bubble")
     def _show_chat_bubble(self, toggle=False):
