@@ -166,6 +166,38 @@ class StatsProcessor:
             logger.error(f"获取事件失败: {e}")
             return []
             
+    def _normalize_app_name(self, app_name: str) -> str:
+        """
+        标准化应用名称，处理特殊应用
+        
+        Args:
+            app_name: 原始应用名称
+            
+        Returns:
+            标准化后的应用名称
+        """
+        if not app_name:
+            return "未知应用"
+            
+        # 转换为小写进行比较
+        app_lower = app_name.lower()
+        
+        # 将 WatchCats 或 Watch Cats 识别为巴利自己
+        if "watchcats" in app_lower.replace(" ", "") or "watch cats" in app_lower:
+            return "巴利桌面宠物（与主人互动）"
+        
+        # 将 Baal 相关应用识别为巴利自己
+        if "baal" in app_lower or "desktop pet" in app_lower or "桌面宠物" in app_name:
+            return "巴利桌面宠物（与主人互动）"
+            
+        # 移除常见的文件扩展名
+        if app_name.endswith(".exe"):
+            app_name = app_name[:-4]
+        elif app_name.endswith(".app"):
+            app_name = app_name[:-4]
+            
+        return app_name
+    
     def _process_events_to_stats(
         self, 
         events: List[Event], 
@@ -188,8 +220,22 @@ class StatsProcessor:
                 "top_apps": []
             }
             
+        # 按应用程序合并事件，但先标准化应用名称
+        normalized_events = []
+        for event in events:
+            event_copy = Event(
+                id=event.id,
+                timestamp=event.timestamp,
+                duration=event.duration,
+                data={
+                    **event.data,
+                    "app": self._normalize_app_name(event.data.get("app", "未知应用"))
+                }
+            )
+            normalized_events.append(event_copy)
+        
         # 按应用程序合并事件
-        merged_events = merge_events_by_keys(events, ["app"])
+        merged_events = merge_events_by_keys(normalized_events, ["app"])
         
         # 按持续时间排序
         sorted_events = sort_by_duration(merged_events)
@@ -294,7 +340,7 @@ class StatsProcessor:
         longest_events = sorted_by_duration[:10]
         longest_events_desc = []
         for i, event in enumerate(longest_events, 1):
-            app = event.data.get("app", "未知应用")
+            app = self._normalize_app_name(event.data.get("app", "未知应用"))
             title = event.data.get("title", "")
             if title and len(title) > 50:
                 title = title[:50] + "..."
