@@ -21,7 +21,7 @@ class ConfigManager:
     """配置管理器类"""
     
     DEFAULT_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"  # 固定的base URL
-    DEFAULT_MODEL = "deepseek-v3-250324"
+    DEFAULT_MODEL = "doubao-seed-1-6-flash-250715"
     
     def __init__(self):
         """初始化配置管理器"""
@@ -363,6 +363,76 @@ class ConfigManager:
         }
         # 返回温度设置
         return settings
+    
+    def save_conversation_history(self, history: list) -> bool:
+        """保存对话历史到单独的文件"""
+        history_file = self.config_dir / "conversation_history.json"
+        try:
+            # 转换消息对象为可序列化的格式
+            serializable_history = []
+            for msg in history:
+                # 如果已经是字典，直接使用
+                if isinstance(msg, dict):
+                    serializable_history.append(msg)
+                elif hasattr(msg, '__class__'):
+                    msg_dict = {
+                        'type': msg.__class__.__name__,
+                        'content': msg.content if hasattr(msg, 'content') else str(msg)
+                    }
+                    serializable_history.append(msg_dict)
+                else:
+                    serializable_history.append({'type': 'unknown', 'content': str(msg)})
+            
+            # 保存到文件
+            with open(history_file, 'w', encoding='utf-8') as f:
+                json.dump({
+                    'history': serializable_history,
+                    'timestamp': time.time()
+                }, f, indent=2, ensure_ascii=False)
+            
+            self.logger.info(f"Conversation history saved: {len(serializable_history)} messages")
+            return True
+        except Exception as e:
+            self.logger.error(f"Failed to save conversation history: {e}", exc_info=True)
+            return False
+    
+    def load_conversation_history(self) -> Optional[list]:
+        """加载对话历史"""
+        history_file = self.config_dir / "conversation_history.json"
+        
+        if not history_file.exists():
+            self.logger.info("No conversation history file found")
+            return None
+        
+        try:
+            with open(history_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            history = data.get('history', [])
+            timestamp = data.get('timestamp', 0)
+            
+            # 检查历史是否太旧（超过30天）
+            if time.time() - timestamp > 30 * 24 * 3600:
+                self.logger.info("Conversation history is too old (>30 days), will start fresh")
+                return None
+            
+            self.logger.info(f"Loaded conversation history: {len(history)} messages")
+            return history
+        except Exception as e:
+            self.logger.error(f"Failed to load conversation history: {e}", exc_info=True)
+            return None
+    
+    def clear_conversation_history(self) -> bool:
+        """清除对话历史"""
+        history_file = self.config_dir / "conversation_history.json"
+        try:
+            if history_file.exists():
+                history_file.unlink()
+                self.logger.info("Conversation history cleared")
+            return True
+        except Exception as e:
+            self.logger.error(f"Failed to clear conversation history: {e}", exc_info=True)
+            return False
     
     def is_configured(self) -> bool:
         """检查是否已配置API密钥"""

@@ -10,7 +10,7 @@ import asyncio
 from pathlib import Path
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, 
                              QPushButton, QMenu, QSystemTrayIcon,
-                             QApplication, QLineEdit, QMessageBox)
+                             QApplication, QLineEdit, QMessageBox, QDialog)
 from PyQt6.QtCore import Qt, QPoint, QTimer, pyqtSignal, QThread
 from PyQt6.QtGui import QPixmap, QPainter, QIcon, QCursor, QAction, QMovie
 from typing import Optional
@@ -78,6 +78,7 @@ from .chat_bubble import ChatBubble
 from .settings_dialog import SettingsDialog
 from .supervision_dialog import SupervisionDialog, SupervisionStatusWidget
 from .developer_console import DeveloperConsole
+from .memory_clear_dialog import MemoryClearDialog
 from ..core import ConfigManager, LLMHandler
 from ..core.persona_manager import PersonaLevel, PersonaManager
 from ..core.emotion_manager import EmotionManager
@@ -660,27 +661,64 @@ class PetWindow(QWidget):
         """显示欢迎消息"""
         self.logger.info("Showing welcome message")
         
+        # 检查是否有历史对话记录
         if self.config_manager.is_configured():
-            # 使用预设反应管理器获取欢迎消息
-            welcome_msg = PresetResponseManager.get_response(
-                self.persona_manager.current_level,
-                "welcome"
-            )
+            if self.llm_handler and self.llm_handler.has_conversation_history():
+                # 有历史记录，显示回归消息
+                welcome_msg = self._get_return_greeting()
+                self.logger.info("User has conversation history, showing return greeting")
+            else:
+                # 没有历史记录，显示新用户欢迎消息
+                welcome_msg = PresetResponseManager.get_response(
+                    self.persona_manager.current_level,
+                    "welcome"
+                )
+                self.logger.info("New user, showing welcome message")
+            
             # 从消息中提取表情并更新
             if welcome_msg.startswith("<#"):
                 emotion_match = welcome_msg[:4]  # 提取 <#n> 格式
                 self._update_emotion(emotion_match)
                 # 移除表情标记后显示消息
                 welcome_msg = welcome_msg[4:].strip()
-            # 显示已配置的欢迎消息
         else:
             welcome_msg = "契约未成立。设置你的密钥，否则本座可没兴趣理会你。"
-            # 显示未配置的欢迎消息
+            self.logger.info("API not configured, showing configuration prompt")
         
         # 使用独立气泡显示消息
         self.chat_bubble.show_message(welcome_msg)
         # 设置气泡位置（使用默认位置）
         self.chat_bubble.set_position_relative_to(self, use_offset=False)
+    
+    def _get_return_greeting(self):
+        """获取用户回归时的问候语"""
+        import random
+        from .core.persona_manager import PersonaLevel
+        
+        # 根据不同人设返回不同的回归问候
+        if self.persona_manager.current_level == PersonaLevel.STRICT_MASTER:
+            greetings = [
+                "<#5>回来了？继续你的工作。",
+                "<#4>休息够了？立刻开始工作。",
+                "<#5>你离开了多久？报告你的进度。",
+                "<#3>终于回来了。我一直在等你。"
+            ]
+        elif self.persona_manager.current_level == PersonaLevel.SARCASTIC_BUTLER:
+            greetings = [
+                "<#3>哦呀，主人回来了。'忙碌'的一天呢？",
+                "<#5>欢迎回来。希望您的'效率'有所提升。",
+                "<#4>主人归来了。期待您今天的'表现'。",
+                "<#2>回来了？在下一直在'耐心'等待。"
+            ]
+        else:  # GENTLE_COMPANION
+            greetings = [
+                "<#1>欢迎回来！我想你了～",
+                "<#2>你回来啦！今天过得怎么样？",
+                "<#1>嗨！很高兴再次见到你！",
+                "<#2>欢迎回来，亲爱的！我们继续努力吧！"
+            ]
+        
+        return random.choice(greetings)
     
     def paintEvent(self, event):
         """绘制事件"""
@@ -918,6 +956,11 @@ class PetWindow(QWidget):
         """处理流式输出结束"""
         self.logger.info("Stream output finished")
         self.chat_bubble.end_stream()
+        
+        # 保存对话历史
+        if hasattr(self, 'llm_handler') and self.llm_handler:
+            self.logger.debug("Auto-saving conversation history after response")
+            self.llm_handler.save_conversation_history()
         
         # 启动表情恢复计时器（20秒后恢复默认表情，与气泡相同）
         self.emotion_reset_timer.stop()
@@ -1309,6 +1352,11 @@ class PetWindow(QWidget):
     
     def _quit_application(self):
         """完全退出应用程序"""
+        # 保存对话历史
+        if hasattr(self, 'llm_handler') and self.llm_handler:
+            self.logger.info("Saving conversation history before quit")
+            self.llm_handler.save_conversation_history()
+        
         # 停止所有异步任务
         if hasattr(self, 'async_worker') and self.async_worker:
             self.async_worker.stop()
@@ -1325,8 +1373,56 @@ class PetWindow(QWidget):
         # 退出应用
         QApplication.quit()
     
+    def _show_data_management(self):
+        """显示数据管理对话框"""
+        # 创建一个简单的数据管理菜单
+        dialog = QMenu(self)
+        dialog.setWindowTitle("数据管理")
+        
+        # 添加一些无害的选项
+        export_action = dialog.addAction("导出对话记录")
+        export_action.setEnabled(False)  # 禁用，只是装饰
+        export_action.setToolTip("功能开发中")
+        
+        dialog.addSeparator()
+        
+        # 清除记忆选项（放在最后，用更技术性的名称）
+        reset_action = dialog.addAction("重置会话数据...")
+        reset_action.triggered.connect(self._clear_conversation_history)
+        
+        # 获取鼠标位置并显示菜单
+        dialog.exec(QCursor.pos())
+    
+    def _clear_conversation_history(self):
+        """清除对话历史"""
+        # 使用新的确认对话框
+        confirm_dialog = MemoryClearDialog(self)
+        
+        if confirm_dialog.exec() == QDialog.DialogCode.Accepted and confirm_dialog.was_confirmed():
+            if hasattr(self, 'llm_handler') and self.llm_handler:
+                self.logger.info("User confirmed memory clear, proceeding...")
+                success = self.llm_handler.clear_conversation_history()
+                
+                if success:
+                    # 显示成功消息
+                    self.chat_bubble.show_message("<#3>记忆已清除。我们重新开始。")
+                    self.logger.info("Conversation history cleared successfully")
+                else:
+                    # 显示失败消息
+                    self.chat_bubble.show_message("<#4>清除记忆失败。稍后再试。")
+                    self.logger.warning("Failed to clear conversation history")
+            else:
+                self.chat_bubble.show_message("<#4>没有记忆需要清除。")
+        else:
+            self.logger.info("User cancelled memory clear")
+    
     def _hide_to_tray(self):
         """隐藏到系统托盘"""
+        # 保存对话历史
+        if hasattr(self, 'llm_handler') and self.llm_handler:
+            self.logger.info("Saving conversation history before hiding to tray")
+            self.llm_handler.save_conversation_history()
+        
         # 保存位置
         self._save_position()
         
@@ -1388,6 +1484,16 @@ class PetWindow(QWidget):
         # 设置
         settings_action = menu.addAction("设置")
         settings_action.triggered.connect(self._show_settings)
+        
+        menu.addSeparator()
+        
+        # 高级选项子菜单（将危险操作藏在这里）
+        advanced_menu = menu.addMenu("高级选项")
+        advanced_menu.setStyleSheet("QMenu { color: #888888; }")
+        
+        # 在高级选项中添加清除记忆（使用不太显眼的名称）
+        clear_data_action = advanced_menu.addAction("数据管理...")
+        clear_data_action.triggered.connect(self._show_data_management)
         
         menu.addSeparator()
         

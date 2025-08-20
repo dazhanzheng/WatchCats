@@ -16,12 +16,13 @@ from ...aw_stats import StatsProcessor
 from .logger_config import get_logger, log_performance, log_api_call
 from .persona_manager import PersonaManager, PersonaLevel
 from .preset_dialogues import PresetDialogues
+from .config_manager import ConfigManager
 
 
 class LLMHandler:
     """LLM处理器类"""
     
-    def __init__(self, base_url: str, api_key: str, model: str = "deepseek-v3-250324", persona_level: PersonaLevel = PersonaLevel.STRICT_MASTER):
+    def __init__(self, base_url: str, api_key: str, model: str = "doubao-seed-1-6-flash-250715", persona_level: PersonaLevel = PersonaLevel.STRICT_MASTER):
         """
         初始化LLM处理器
         
@@ -100,6 +101,13 @@ class LLMHandler:
         
         # 添加系统消息
         self.messages.append(SystemMessage(content=self.system_prompt))
+        
+        # 初始化配置管理器用于历史记录存储
+        self.config_manager = ConfigManager()
+        
+        # 尝试加载历史对话记录
+        self._load_conversation_history()
+        
         self.logger.debug(f"System message added, total messages: {len(self.messages)}")
         self.logger.info("LLMHandler initialization completed successfully")
     
@@ -566,4 +574,89 @@ class LLMHandler:
                 history.append({"role": "assistant", "content": msg.content})
                 
         self.logger.debug(f"Retrieved {len(history)} history entries")
-        return history 
+        return history
+    
+    def _load_conversation_history(self):
+        """加载对话历史"""
+        try:
+            history_data = self.config_manager.load_conversation_history()
+            
+            if history_data:
+                self.logger.info(f"Found conversation history with {len(history_data)} messages")
+                
+                # 恢复消息对象
+                for msg_dict in history_data:
+                    msg_type = msg_dict.get('type', '')
+                    content = msg_dict.get('content', '')
+                    
+                    if msg_type == 'HumanMessage':
+                        self.messages.append(HumanMessage(content=content))
+                        # 同步到assistant的历史
+                        if hasattr(self, 'assistant'):
+                            self.assistant.conversation_history.append(HumanMessage(content=content))
+                    elif msg_type == 'AIMessage':
+                        self.messages.append(AIMessage(content=content))
+                        # 同步到assistant的历史
+                        if hasattr(self, 'assistant'):
+                            self.assistant.conversation_history.append(AIMessage(content=content))
+                
+                self.logger.info(f"Loaded {len(history_data)} messages from history")
+                # 标记为已有历史记录
+                self.has_history = True
+            else:
+                self.logger.info("No conversation history found, starting fresh")
+                self.has_history = False
+                
+        except Exception as e:
+            self.logger.error(f"Failed to load conversation history: {e}", exc_info=True)
+            self.has_history = False
+    
+    def save_conversation_history(self):
+        """保存对话历史"""
+        try:
+            # 只保存用户和AI的消息，不保存系统消息
+            messages_to_save = [msg for msg in self.messages if not isinstance(msg, SystemMessage)]
+            
+            if messages_to_save:
+                success = self.config_manager.save_conversation_history(messages_to_save)
+                if success:
+                    self.logger.info(f"Saved {len(messages_to_save)} messages to history")
+                else:
+                    self.logger.warning("Failed to save conversation history")
+                return success
+            else:
+                self.logger.debug("No messages to save")
+                return True
+                
+        except Exception as e:
+            self.logger.error(f"Error saving conversation history: {e}", exc_info=True)
+            return False
+    
+    def clear_conversation_history(self):
+        """清除对话历史"""
+        try:
+            # 清除内存中的历史
+            self.messages = [self.messages[0]]  # 只保留系统消息
+            
+            # 清除assistant的历史
+            if hasattr(self, 'assistant'):
+                self.assistant.clear_history()
+            
+            # 清除持久化的历史
+            success = self.config_manager.clear_conversation_history()
+            
+            if success:
+                self.logger.info("Conversation history cleared successfully")
+                self.has_history = False
+            else:
+                self.logger.warning("Failed to clear persistent conversation history")
+                
+            return success
+            
+        except Exception as e:
+            self.logger.error(f"Error clearing conversation history: {e}", exc_info=True)
+            return False
+    
+    def has_conversation_history(self) -> bool:
+        """检查是否有对话历史"""
+        return hasattr(self, 'has_history') and self.has_history 

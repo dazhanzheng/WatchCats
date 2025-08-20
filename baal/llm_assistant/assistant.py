@@ -33,7 +33,7 @@ class LLMAssistant:
         self,
         base_url: str,
         api_key: str,
-        model: str = "deepseek-v3-250324",
+        model: str = "doubao-seed-1-6-flash-250715",
         temperature: float = 0.1,  # 保留原参数以保持向后兼容
         parse_temperature: Optional[float] = None,  # 新增：解析温度
         chat_temperature: Optional[float] = None,   # 新增：对话温度
@@ -297,7 +297,7 @@ class LLMAssistant:
         
         # 获取最近的对话上下文
         recent_messages = []
-        for msg in self.conversation_history[-10:]:  # 最近5轮对话（每轮包含用户和AI两条消息）
+        for msg in self.conversation_history[-40:]:  # 最近20轮对话（每轮包含用户和AI两条消息）
             if isinstance(msg, HumanMessage):
                 recent_messages.append(HumanMessage(content=msg.content))
             elif isinstance(msg, AIMessage):
@@ -443,8 +443,8 @@ class LLMAssistant:
         # 计算非系统消息的数量（用户消息 + AI消息）
         non_system_messages = [msg for msg in self.conversation_history if not isinstance(msg, SystemMessage)]
         
-        # 当达到10条消息（5轮对话）时生成总结
-        return len(non_system_messages) >= 10 and not self.is_summarizing and self.summary is None
+        # 当达到40条消息（20轮对话）时生成总结
+        return len(non_system_messages) >= 40 and not self.is_summarizing and self.summary is None
     
     def _start_background_summary(self):
         """在后台线程中启动总结生成"""
@@ -461,7 +461,7 @@ class LLMAssistant:
                 asyncio.set_event_loop(loop)
                 
                 # 获取需要总结的消息
-                messages_to_summarize = self.conversation_history[:11]  # 系统消息 + 前5轮对话
+                messages_to_summarize = self.conversation_history[:41]  # 系统消息 + 前20轮对话
                 
                 # 生成总结
                 summary = loop.run_until_complete(self._generate_summary_async(messages_to_summarize))
@@ -473,7 +473,7 @@ class LLMAssistant:
                         self.conversation_history = [
                             self.conversation_history[0],  # 系统消息
                             AIMessage(content=f"[历史总结] {summary}")
-                        ] + self.conversation_history[11:]  # 保留未总结的消息
+                        ] + self.conversation_history[41:]  # 保留未总结的消息
                 
                 self._notify_summary_status("summary_complete")
                 
