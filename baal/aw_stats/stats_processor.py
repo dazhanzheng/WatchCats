@@ -29,7 +29,11 @@ logger = logging.getLogger(__name__)
 class StatsProcessor:
     """处理 ActivityWatch 统计数据的主类"""
     
-    def __init__(self, client_name: str = "aw-stats-processor", testing: bool = False):
+    def __init__(self, client_name: str = None, testing: bool = False):
+        # 生成唯一的客户端名称以避免冲突
+        if client_name is None:
+            import random
+            client_name = f"aw-stats-processor-{random.randint(1000, 9999)}"
         """
         初始化统计处理器
         
@@ -107,6 +111,36 @@ class StatsProcessor:
             
         return "".join(parts)
         
+    def _get_events_paginated(self, bucket_id: str, start: datetime, end: datetime, limit: int = 5000) -> List[Event]:
+        """
+        获取事件，带有数量限制以避免内存问题
+        
+        Args:
+            bucket_id: 桶ID
+            start: 开始时间
+            end: 结束时间
+            limit: 最大事件数量
+            
+        Returns:
+            事件列表
+        """
+        try:
+            # 使用limit参数限制返回的事件数量
+            events = self.client.get_events(
+                bucket_id, 
+                start=start, 
+                end=end,
+                limit=limit  # 限制最大返回数量
+            )
+            
+            if len(events) == limit:
+                logger.warning(f"事件数量达到限制 {limit}，可能有更多事件未加载")
+            
+            return events
+        except Exception as e:
+            logger.error(f"获取事件失败: {e}")
+            return []
+    
     def _get_events_for_period(self, hours_back: float) -> List[Event]:
         """
         获取指定时间段内的事件，并过滤掉用户不活跃(AFK)的时间段
@@ -131,22 +165,24 @@ class StatsProcessor:
         start_time = end_time - timedelta(hours=hours_back)
         
         try:
-            # 获取窗口事件
-            window_events = self.client.get_events(
+            # 获取窗口事件，限制数量以防止内存问题
+            window_events = self._get_events_paginated(
                 window_bucket_id, 
                 start=start_time, 
-                end=end_time
+                end=end_time,
+                limit=2000  # 限制最多2000个窗口事件
             )
             
             if not afk_bucket_id:
                 # 如果没有 AFK 桶，返回所有窗口事件
                 return window_events
                 
-            # 获取 AFK 事件
-            afk_events = self.client.get_events(
+            # 获取 AFK 事件，限制数量
+            afk_events = self._get_events_paginated(
                 afk_bucket_id,
                 start=start_time,
-                end=end_time
+                end=end_time,
+                limit=1000  # AFK事件通常较少，1000应该足够
             )
             
             # 只保留状态为 "not-afk" 的事件

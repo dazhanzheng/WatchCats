@@ -11,6 +11,7 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from ..aw_stats.stats_processor import StatsProcessor
 from ..llm_assistant.assistant import LLMAssistant
 from .core.config_manager import ConfigManager
+from .core.constants import SUPERVISION
 import json
 import logging
 
@@ -48,10 +49,11 @@ class SupervisionMode(QObject):
         self.long_term_goal = ""  # 长期目标
         self.short_term_goals = []  # 短期目标列表
         self.check_thread: Optional[threading.Thread] = None
+        self._stop_event = threading.Event()  # 用于优雅停止线程
         # 检查间隔（秒）- 可以通过环境变量调整，便于测试
         import os
-        # 默认5分钟（300秒），可通过环境变量调整
-        self.check_interval = int(os.environ.get('SUPERVISION_CHECK_INTERVAL', '300'))  # 生产环境：5分钟
+        # 使用常量中的默认值，可通过环境变量覆盖
+        self.check_interval = int(os.environ.get('SUPERVISION_CHECK_INTERVAL', str(SUPERVISION['default_check_interval'])))
         logger.info(f"监督模式检查间隔设置为 {self.check_interval} 秒")
         
         logger.debug("监督模式管理器初始化完成")
@@ -69,14 +71,22 @@ class SupervisionMode(QObject):
                     base_url=config['base_url'],
                     api_key=config['api_key'],
                     model=config.get('model', 'doubao-seed-1-6-flash-250715'),
-                    parse_temperature=0.1,  # 解析温度保持低值，确保JSON格式正确
-                    chat_temperature=0.85,   # 提高对话温度，生成更多样化的监督提醒
+                    parse_temperature=SUPERVISION['parse_temperature'],  # 解析温度保持低值，确保JSON格式正确
+                    chat_temperature=SUPERVISION['chat_temperature'],   # 提高对话温度，生成更多样化的监督提醒
                     stats_processor=self.stats_processor
                 )
                 logger.info("LLM助手初始化成功（parse_temp=0.1, chat_temp=0.85）")
         except Exception as e:
             logger.error(f"初始化LLM助手失败: {e}")
             self.llm_assistant = None
+    
+    def __del__(self):
+        """析构函数，确保线程被正确停止"""
+        try:
+            if self.is_active:
+                self.stop_supervision()
+        except:
+            pass  # 忽略析构时的错误
     
     def _load_supervision_settings(self):
         """加载监督设置"""
@@ -151,13 +161,28 @@ class SupervisionMode(QObject):
         return True
     
     def stop_supervision(self):
-        """停止监督模式"""
+        """停止监督模式，确保正确清理资源"""
         self.is_active = False
+        self._stop_event.set()  # 设置停止事件
+        
+        # 等待线程结束
+        if self.check_thread and self.check_thread.is_alive():
+            logger.info("等待监督线程结束...")
+            self.check_thread.join(timeout=SUPERVISION['thread_join_timeout'])  # 最多等待5秒
+            if self.check_thread.is_alive():
+                logger.warning("监督线程未能在5秒内结束")
+            else:
+                logger.info("监督线程已成功结束")
+        
+        # 清理线程引用
+        self.check_thread = None
+        self._stop_event.clear()  # 重置事件，为下次使用准备
+        
         self.mode_changed.emit(False)
         logger.info("监督模式已停止")
     
     def _check_loop(self):
-        """检查循环"""
+        """检查循环，使用事件机制优雅停止"""
         logger.info(f"检查线程已启动，每{self.check_interval}秒检查一次")
         
         # 首次启动后立即进行一次检查（可选，用于测试）
@@ -170,12 +195,11 @@ class SupervisionMode(QObject):
                 logger.error(f"首次检查出错: {e}")
         
         while self.is_active:
-            # 等待指定间隔
-            for i in range(self.check_interval):
-                if not self.is_active:
-                    logger.info("检查线程已停止")
-                    return
-                time.sleep(1)
+            # 使用事件等待，这样可以被中断
+            if self._stop_event.wait(timeout=self.check_interval):
+                # 如果事件被设置，说明需要停止
+                logger.info("收到停止信号，检查线程正在退出")
+                return
             
             if not self.is_active:
                 break

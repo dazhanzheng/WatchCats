@@ -194,36 +194,63 @@ class LLMAssistant:
             # 处理响应内容，提取 JSON 部分
             content = response.content
             
-            # 如果内容包含 JSON 代码块，提取它
+            # 安全地提取和验证 JSON
+            extracted_json = None
+            
+            # 首先尝试从 JSON 代码块中提取
             json_match = re.search(r'```json\s*(.*?)\s*```', content, re.DOTALL)
             if json_match:
-                content = json_match.group(1)
-            # 否则尝试找到 JSON 对象
+                extracted_json = json_match.group(1).strip()
             else:
-                # 移除可能的前缀文本
+                # 尝试找到 JSON 对象
                 json_start = content.find('{')
                 if json_start != -1:
-                    content = content[json_start:]
-                # 找到 JSON 结束位置
-                brace_count = 0
-                json_end = -1
-                for i, char in enumerate(content):
-                    if char == '{':
-                        brace_count += 1
-                    elif char == '}':
-                        brace_count -= 1
-                        if brace_count == 0:
-                            json_end = i + 1
-                            break
-                if json_end != -1:
-                    content = content[:json_end]
+                    # 使用更安全的方式提取 JSON
+                    try:
+                        # 尝试直接解析以验证 JSON 有效性
+                        import json
+                        test_content = content[json_start:]
+                        # 逐步尝试找到有效的 JSON 结束位置
+                        for end_pos in range(len(test_content), 0, -1):
+                            try:
+                                json.loads(test_content[:end_pos])
+                                extracted_json = test_content[:end_pos]
+                                break
+                            except json.JSONDecodeError:
+                                continue
+                    except Exception:
+                        # 如果上述方法失败，使用原始的括号计数方法作为后备
+                        brace_count = 0
+                        json_end = -1
+                        test_content = content[json_start:]
+                        for i, char in enumerate(test_content):
+                            if char == '{':
+                                brace_count += 1
+                            elif char == '}':
+                                brace_count -= 1
+                                if brace_count == 0:
+                                    json_end = i + 1
+                                    break
+                        if json_end != -1:
+                            extracted_json = test_content[:json_end]
+            
+            if not extracted_json:
+                raise ValueError("无法从响应中提取有效的 JSON")
+            
+            # 验证提取的内容是有效的 JSON
+            try:
+                import json
+                json.loads(extracted_json)  # 验证 JSON 格式
+            except json.JSONDecodeError as e:
+                logger.error(f"提取的内容不是有效的 JSON: {e}")
+                raise ValueError(f"JSON 格式无效: {e}")
             
             if self.developer_mode:
                 print(f"\n[开发者模式] 提取的 JSON:")
-                print(f"  {content}")
+                print(f"  {extracted_json}")
                 
-            logger.debug(f"解析的 JSON 内容: {content}")
-            parsed_command = self.stats_parser.parser.parse(content)
+            logger.debug(f"解析的 JSON 内容: {extracted_json}")
+            parsed_command = self.stats_parser.parser.parse(extracted_json)
             
             if self.developer_mode:
                 print(f"\n[开发者模式] 解析后的命令:")

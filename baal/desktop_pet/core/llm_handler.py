@@ -13,7 +13,8 @@ from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from ...llm_assistant import LLMAssistant
 from ...llm_assistant.binary_intent_classifier import BinaryIntentClassifier
 from ...aw_stats import StatsProcessor
-from .logger_config import get_logger, log_performance, log_api_call
+from .logger_config import get_logger, log_performance
+from .constants import CHAR_DELAYS, get_char_delay
 from .persona_manager import PersonaManager, PersonaLevel
 from .preset_dialogues import PresetDialogues
 from .config_manager import ConfigManager
@@ -45,11 +46,11 @@ class LLMHandler:
         
         # 不记录敏感信息的DEBUG日志
         
-        # 字符显示间隔配置（单位：秒）
+        # 字符显示间隔配置（从常量模块加载）
         self.char_delays = {
-            'normal': 0.02,      # 普通字符：20ms
-            'punctuation': 0.08,  # 标点符号：80ms
-            'newline': 0.05      # 换行符：50ms
+            'normal': CHAR_DELAYS['normal'],
+            'punctuation': CHAR_DELAYS['punctuation'],
+            'newline': CHAR_DELAYS['newline']
         }
         
         # 初始化 LLMAssistant（具有完整功能）
@@ -158,7 +159,6 @@ class LLMHandler:
             self.logger.error(f"Failed to create LLM instance: {e}", exc_info=True)
             raise
     
-    @log_api_call('openai', '/v1/chat/completions', 'POST')
     def _generate_baal_response(self, prompt: str) -> str:
         """生成巴利风格的回复（低温度，准确性优先）"""
         self.logger.debug(f"Generating Baal response for prompt length: {len(prompt)}")
@@ -200,7 +200,6 @@ class LLMHandler:
         self.logger.info(f"Character delays updated: {old_delays} -> {self.char_delays}")
     
     @log_performance
-    @log_api_call('openai', '/v1/chat/completions', 'POST')
     async def _generate_chat_response(self, user_input: str) -> str:
         """生成普通聊天回复"""
         self.logger.debug(f"Generating chat response for input: {user_input[:100]}...")
@@ -501,7 +500,6 @@ class LLMHandler:
         self.logger.info(f"Streaming chat completed in {total_time:.3f}s")
     
     @log_performance
-    @log_api_call('openai', '/v1/chat/completions', 'POST')
     def chat_sync(self, user_input: str) -> str:
         """
         同步对话（非流式）

@@ -11,6 +11,7 @@ import sys
 import platform
 import shutil
 import time
+import threading
 from pathlib import Path
 from typing import Dict, Any, Optional
 from .logger_config import get_logger, log_performance
@@ -27,6 +28,10 @@ class ConfigManager:
         """初始化配置管理器"""
         self.logger = get_logger('baal.desktop_pet.core.config_manager')
         self.logger.info("Initializing ConfigManager")
+        
+        # 文件锁，用于防止并发写入
+        self._config_lock = threading.Lock()
+        
         # 配置文件路径 - Windows使用AppData，其他系统使用用户目录
         self.config_dir = self._get_config_dir()
         self.config_file = self.config_dir / "config.json"
@@ -169,29 +174,38 @@ class ConfigManager:
             self.config['show_developer_mode'] = True
     
     def _load_config(self) -> Dict[str, Any]:
-        """加载配置文件"""
+        """加载配置文件，使用线程锁防止并发读写冲突"""
+        # 如果锁存在则使用锁，否则直接执行（初始化时）
+        if hasattr(self, '_config_lock'):
+            with self._config_lock:
+                return self._do_load_config()
+        else:
+            return self._do_load_config()
+    
+    def _do_load_config(self) -> Dict[str, Any]:
+        """实际执行配置加载"""
         if self.config_file.exists():
             self.logger.info(f"Loading existing config file: {self.config_file}")
             try:
                 with open(self.config_file, 'r', encoding='utf-8') as f:
                     config = json.load(f)
-                    # 配置加载成功
-                    
-                    # 确保基础配置存在
-                    if 'base_url' not in config:
-                        config['base_url'] = self.DEFAULT_BASE_URL
-                        self.logger.info(f"Added default base_url: {self.DEFAULT_BASE_URL}")
-                    
-                    if 'model' not in config:
-                        config['model'] = self.DEFAULT_MODEL
-                        self.logger.info(f"Added default model: {self.DEFAULT_MODEL}")
-                    
-                    # 记录加载的配置（不记录敏感信息）
-                    safe_config = {k: v for k, v in config.items() if k != 'api_key'}
-                    safe_config['api_key'] = '***' if config.get('api_key') else 'Not set'
-                    # 配置加载完成
-                    
-                    return config
+                # 配置加载成功
+                
+                # 确保基础配置存在
+                if 'base_url' not in config:
+                    config['base_url'] = self.DEFAULT_BASE_URL
+                    self.logger.info(f"Added default base_url: {self.DEFAULT_BASE_URL}")
+                
+                if 'model' not in config:
+                    config['model'] = self.DEFAULT_MODEL
+                    self.logger.info(f"Added default model: {self.DEFAULT_MODEL}")
+                
+                # 记录加载的配置（不记录敏感信息）
+                safe_config = {k: v for k, v in config.items() if k != 'api_key'}
+                safe_config['api_key'] = '***' if config.get('api_key') else 'Not set'
+                # 配置加载完成
+                
+                return config
             except json.JSONDecodeError as e:
                 self.logger.error(f"Config file is corrupted (JSON decode error): {e}", exc_info=True)
                 self.logger.warning("Will use default configuration")
@@ -233,78 +247,79 @@ class ConfigManager:
         return self._safe_write_config(self.config)
     
     def _safe_write_config(self, config: Dict[str, Any]) -> bool:
-        """安全地写入配置文件"""
-        # 确保目录存在
-        self._ensure_config_dir()
-        
-        # 使用临时文件写入
-        temp_file = self.config_file.with_suffix('.tmp')
-        backup_file = self.config_file.with_suffix('.bak')
-        
-        try:
-            # 1. 写入临时文件
-            with open(temp_file, 'w', encoding='utf-8') as f:
-                json.dump(config, f, indent=2, ensure_ascii=False)
+        """安全地写入配置文件，使用线程锁防止并发写入"""
+        with self._config_lock:
+            # 确保目录存在
+            self._ensure_config_dir()
             
-            # 2. 验证临时文件
-            with open(temp_file, 'r', encoding='utf-8') as f:
-                json.load(f)  # 验证 JSON 格式正确
+            # 使用临时文件写入
+            temp_file = self.config_file.with_suffix('.tmp')
+            backup_file = self.config_file.with_suffix('.bak')
             
-            # 3. 备份现有文件（如果存在）
-            if self.config_file.exists():
-                try:
-                    # Windows 上可能需要先删除旧备份
-                    if backup_file.exists():
-                        backup_file.unlink()
-                    
-                    # 复制而不是移动，避免权限问题
-                    shutil.copy2(self.config_file, backup_file)
-                    # 备份成功
-                except Exception as e:
-                    self.logger.warning(f"Could not create backup: {e}")
-            
-            # 4. 替换主配置文件
-            if sys.platform == "win32":
-                # Windows: 需要先删除目标文件
+            try:
+                # 1. 写入临时文件
+                with open(temp_file, 'w', encoding='utf-8') as f:
+                    json.dump(config, f, indent=2, ensure_ascii=False)
+                
+                # 2. 验证临时文件
+                with open(temp_file, 'r', encoding='utf-8') as f:
+                    json.load(f)  # 验证 JSON 格式正确
+                
+                # 3. 备份现有文件（如果存在）
                 if self.config_file.exists():
                     try:
-                        self.config_file.unlink()
+                        # Windows 上可能需要先删除旧备份
+                        if backup_file.exists():
+                            backup_file.unlink()
+                        
+                        # 复制而不是移动，避免权限问题
+                        shutil.copy2(self.config_file, backup_file)
+                        # 备份成功
                     except Exception as e:
-                        self.logger.warning(f"Could not delete old config: {e}")
-                        # 尝试使用 shutil.move
-                        shutil.move(str(temp_file), str(self.config_file))
-                        return True
-            
-            # 重命名临时文件为配置文件
-            try:
-                temp_file.rename(self.config_file)
-            except Exception:
-                # 如果重命名失败，尝试复制
-                shutil.copy2(temp_file, self.config_file)
-                temp_file.unlink()
-            
-            self.logger.info("Configuration saved successfully")
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"Failed to save config: {e}", exc_info=True)
-            
-            # 清理临时文件
-            if temp_file.exists():
+                        self.logger.warning(f"Could not create backup: {e}")
+                
+                # 4. 替换主配置文件
+                if sys.platform == "win32":
+                    # Windows: 需要先删除目标文件
+                    if self.config_file.exists():
+                        try:
+                            self.config_file.unlink()
+                        except Exception as e:
+                            self.logger.warning(f"Could not delete old config: {e}")
+                            # 尝试使用 shutil.move
+                            shutil.move(str(temp_file), str(self.config_file))
+                            return True
+                
+                # 重命名临时文件为配置文件
                 try:
+                    temp_file.rename(self.config_file)
+                except Exception:
+                    # 如果重命名失败，尝试复制
+                    shutil.copy2(temp_file, self.config_file)
                     temp_file.unlink()
-                except:
-                    pass
-            
-            # 尝试从备份恢复
-            if backup_file.exists() and not self.config_file.exists():
-                try:
-                    shutil.copy2(backup_file, self.config_file)
-                    self.logger.info("Restored config from backup")
-                except:
-                    pass
-            
-            return False
+                
+                self.logger.info("Configuration saved successfully")
+                return True
+                
+            except Exception as e:
+                self.logger.error(f"Failed to save config: {e}", exc_info=True)
+                
+                # 清理临时文件
+                if temp_file.exists():
+                    try:
+                        temp_file.unlink()
+                    except:
+                        pass
+                
+                # 尝试从备份恢复
+                if backup_file.exists() and not self.config_file.exists():
+                    try:
+                        shutil.copy2(backup_file, self.config_file)
+                        self.logger.info("Restored config from backup")
+                    except:
+                        pass
+                
+                return False
     
     def get_api_key(self) -> Optional[str]:
         """获取API密钥"""

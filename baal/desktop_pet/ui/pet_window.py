@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
                              QPushButton, QMenu, QSystemTrayIcon,
                              QApplication, QLineEdit, QMessageBox, QDialog)
 from PyQt6.QtCore import Qt, QPoint, QTimer, pyqtSignal, QThread
+from ..core.constants import TIMERS, WINDOW_SIZES, MACOS_NOTCH_SAFE_AREA, get_timer_interval
 from PyQt6.QtGui import QPixmap, QPainter, QIcon, QCursor, QAction, QMovie
 from typing import Optional
 
@@ -120,6 +121,14 @@ class AsyncWorker(QThread):
         """运行异步任务"""
         self.is_running = True
         
+        # 确保清理旧的事件循环
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.close()
+        except RuntimeError:
+            pass
+        
         # 创建新的事件循环
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -130,6 +139,7 @@ class AsyncWorker(QThread):
             self.error_occurred.emit(str(e))
         finally:
             loop.close()
+            asyncio.set_event_loop(None)  # 清除事件循环引用
             self.is_running = False
     
     async def _process_stream(self):
@@ -689,7 +699,7 @@ class PetWindow(QWidget):
     def _get_return_greeting(self):
         """获取用户回归时的问候语"""
         import random
-        from .core.persona_manager import PersonaLevel
+        from ..core.persona_manager import PersonaLevel
         
         # 根据不同人设返回不同的回归问候
         if self.persona_manager.current_level == PersonaLevel.STRICT_MASTER:
@@ -774,7 +784,7 @@ class PetWindow(QWidget):
         """鼠标离开事件"""
         super().leaveEvent(event)
         # 延迟隐藏按钮（给用户时间移动到按钮上）
-        QTimer.singleShot(500, self._check_hide_buttons)
+        QTimer.singleShot(get_timer_interval('hide_buttons_check'), self._check_hide_buttons)
     
     def _check_hide_buttons(self):
         """检查是否需要隐藏按钮"""
@@ -898,7 +908,7 @@ class PetWindow(QWidget):
             return
         
         # 延迟显示AI回复（让用户消息先显示）
-        QTimer.singleShot(500, lambda: self._start_ai_response())
+        QTimer.singleShot(get_timer_interval('async_response_start'), lambda: self._start_ai_response())
         self.logger.debug("AI response timer started")
         
         # 设置输入
@@ -1328,6 +1338,9 @@ class PetWindow(QWidget):
             self.logger.info("Saving conversation history before quit")
             self.llm_handler.save_conversation_history()
         
+        # 清理所有资源
+        self._cleanup_resources()
+        
         # 停止所有异步任务
         if hasattr(self, 'async_worker') and self.async_worker:
             self.async_worker.stop()
@@ -1613,7 +1626,7 @@ class PetWindow(QWidget):
             # 监督模式启动失败，提示用户配置API
             self.chat_bubble.show_message("监督模式需要配置API密钥。即将打开设置...")
             # 延迟一下让用户看到消息
-            QTimer.singleShot(1500, self._open_settings_for_supervision)
+            QTimer.singleShot(get_timer_interval('settings_open_delay'), self._open_settings_for_supervision)
     
     def _open_settings_for_supervision(self):
         """打开设置对话框供监督模式配置API"""
@@ -1778,10 +1791,40 @@ class PetWindow(QWidget):
         if not self._welcome_shown:
             self._welcome_shown = True
             # 延迟显示欢迎消息，确保窗口完全渲染
-            QTimer.singleShot(500, self._show_welcome_message)
+            QTimer.singleShot(get_timer_interval('welcome_delay'), self._show_welcome_message)
+    
+    def _cleanup_resources(self):
+        """清理所有资源，防止内存泄漏"""
+        # 停止所有计时器
+        if hasattr(self, 'emotion_reset_timer') and self.emotion_reset_timer:
+            self.emotion_reset_timer.stop()
+            self.emotion_reset_timer.deleteLater()
+        
+        if hasattr(self, 'bubble_auto_hide_timer') and self.bubble_auto_hide_timer:
+            self.bubble_auto_hide_timer.stop()
+            self.bubble_auto_hide_timer.deleteLater()
+        
+        # 停止异步工作线程
+        if hasattr(self, 'async_worker') and self.async_worker:
+            self.async_worker.stop()
+            self.async_worker.wait(1000)  # 最多等待1秒
+            if self.async_worker.isRunning():
+                self.async_worker.terminate()  # 强制终止
+            self.async_worker.deleteLater()
+        
+        # 停止监督模式
+        if hasattr(self, 'supervision_mode') and self.supervision_mode:
+            self.supervision_mode.stop_supervision()
     
     def closeEvent(self, event):
         """关闭事件"""
         # 隐藏到托盘而不是退出
         event.ignore()
         self._hide_to_tray()
+    
+    def __del__(self):
+        """析构函数，确保资源清理"""
+        try:
+            self._cleanup_resources()
+        except:
+            pass  # 忽略析构时的错误
