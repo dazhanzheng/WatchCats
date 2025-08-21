@@ -8,10 +8,12 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout,
                              QLabel, QLineEdit, QPushButton, 
                              QMessageBox, QGroupBox, QSlider, QSpinBox,
                              QComboBox, QTextEdit, QScrollArea, QWidget,
-                             QApplication)
+                             QApplication, QCheckBox)
 from PyQt6.QtCore import Qt
 from typing import Optional
 from ..core.persona_manager import PersonaLevel
+from ..core.autostart_manager import AutostartManager
+import sys
 
 
 class SettingsDialog(QDialog):
@@ -27,6 +29,7 @@ class SettingsDialog(QDialog):
         """
         super().__init__(parent)
         self.config_manager = config_manager
+        self.autostart_manager = AutostartManager()
         
         # 设置窗口属性
         self.setWindowTitle("设置")
@@ -355,6 +358,32 @@ class SettingsDialog(QDialog):
         size_group.setLayout(size_layout)
         layout.addWidget(size_group)
         
+        # 系统设置组（仅 Windows 显示）
+        if sys.platform == "win32":
+            system_group = QGroupBox("系统设置")
+            system_layout = QVBoxLayout()
+            
+            # 开机自启动复选框
+            self.autostart_checkbox = QCheckBox("开机自动启动")
+            self.autostart_checkbox.setToolTip("勾选后，巴利将在系统启动时自动运行")
+            
+            # 检查当前状态
+            is_enabled = self.autostart_manager.is_autostart_enabled()
+            self.autostart_checkbox.setChecked(is_enabled)
+            
+            # 连接信号
+            self.autostart_checkbox.stateChanged.connect(self._on_autostart_changed)
+            
+            system_layout.addWidget(self.autostart_checkbox)
+            
+            # 说明文本
+            system_info = QLabel("提示：启用后巴利将在系统启动时自动运行")
+            system_info.setStyleSheet("color: #666666; font-size: 11px; margin-top: 5px;")
+            system_layout.addWidget(system_info)
+            
+            system_group.setLayout(system_layout)
+            layout.addWidget(system_group)
+        
         # 说明文本
         info_label = QLabel("提示：API密钥将安全保存在本地配置文件中")
         info_label.setStyleSheet("color: #666666; font-size: 12px;")
@@ -543,4 +572,27 @@ class SettingsDialog(QDialog):
         }
         
         description = descriptions.get(persona_level, "未知人设")
-        self.persona_description.setText(description) 
+        self.persona_description.setText(description)
+    
+    def _on_autostart_changed(self, state):
+        """处理开机自启动状态变化"""
+        if state == Qt.CheckState.Checked.value:
+            # 启用开机自启动
+            success = self.autostart_manager.enable_autostart()
+            if not success:
+                QMessageBox.warning(
+                    self,
+                    "设置失败",
+                    "无法设置开机自启动。\n请确保程序有足够的权限。"
+                )
+                # 恢复复选框状态
+                self.autostart_checkbox.setChecked(False)
+        else:
+            # 禁用开机自启动
+            success = self.autostart_manager.disable_autostart()
+            if not success:
+                QMessageBox.warning(
+                    self,
+                    "设置失败",
+                    "无法取消开机自启动。\n请确保程序有足够的权限。"
+                ) 
