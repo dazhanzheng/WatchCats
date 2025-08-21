@@ -490,10 +490,6 @@ class PetWindow(QWidget):
         self.toggle_action = tray_menu.addAction("显示桌宠")
         self.toggle_action.triggered.connect(self._toggle_visibility)
         
-        # 聊天
-        chat_action = tray_menu.addAction("聊天")
-        chat_action.triggered.connect(self._show_chat_from_tray)
-        
         tray_menu.addSeparator()
         
         # 重置位置
@@ -1325,16 +1321,6 @@ class PetWindow(QWidget):
         except Exception as e:
             self.logger.warning(f"无法设置Windows置顶: {e}")
     
-    def _show_chat_from_tray(self):
-        """从托盘切换聊天窗口"""
-        # 先确保主窗口可见
-        if not self.isVisible():
-            self.show()
-            self.toggle_action.setText("隐藏桌宠")
-        
-        # 切换聊天气泡显示状态
-        self._show_chat_bubble(toggle=True)
-    
     def _quit_application(self):
         """完全退出应用程序"""
         # 保存对话历史
@@ -1444,13 +1430,6 @@ class PetWindow(QWidget):
     def _show_context_menu(self, pos):
         """显示右键菜单"""
         menu = QMenu(self)
-        
-        # 聊天（根据气泡状态显示不同文本）
-        chat_text = "隐藏聊天" if self.chat_bubble.isVisible() else "聊天"
-        chat_action = menu.addAction(chat_text)
-        chat_action.triggered.connect(lambda: self._show_chat_bubble(toggle=True))
-        
-        menu.addSeparator()
         
         # 监督模式
         supervision_text = "停止监督" if self.supervision_mode.is_active else "监督模式"

@@ -68,7 +68,7 @@ class SupervisionMode(QObject):
                 self.llm_assistant = LLMAssistant(
                     base_url=config['base_url'],
                     api_key=config['api_key'],
-                    model=config.get('model', 'deepseek-v3-250324'),
+                    model=config.get('model', 'doubao-seed-1-6-flash-250715'),
                     parse_temperature=0.1,  # 解析温度保持低值，确保JSON格式正确
                     chat_temperature=0.85,   # 提高对话温度，生成更多样化的监督提醒
                     stats_processor=self.stats_processor
