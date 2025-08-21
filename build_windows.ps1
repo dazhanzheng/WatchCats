@@ -3,6 +3,24 @@
 Write-Host "====================================" -ForegroundColor Cyan
 Write-Host "Baal宠物助手 Windows 构建脚本" -ForegroundColor Cyan
 Write-Host "====================================" -ForegroundColor Cyan
+Write-Host ""
+
+# 运行依赖检查（可选）
+if (Test-Path ".\check_windows_deps.ps1") {
+    $response = Read-Host "是否运行系统依赖检查? (Y/N)"
+    if ($response -eq 'Y' -or $response -eq 'y') {
+        Write-Host ""
+        Write-Host "运行依赖检查..." -ForegroundColor Yellow
+        & .\check_windows_deps.ps1
+        Write-Host ""
+        $continue = Read-Host "是否继续构建? (Y/N)"
+        if ($continue -ne 'Y' -and $continue -ne 'y') {
+            Write-Host "构建已取消" -ForegroundColor Yellow
+            exit 0
+        }
+    }
+}
+Write-Host ""
 
 # 检查Python是否安装
 try {
@@ -128,6 +146,8 @@ if (Test-Path $exePath) {
     Write-Host "1. 直接运行 dist\Baal宠物助手.exe" -ForegroundColor White
     Write-Host "2. 将 dist 文件夹复制到其他电脑使用" -ForegroundColor White
     Write-Host "3. 使用 NSIS 或 Inno Setup 创建安装程序" -ForegroundColor White
+    Write-Host ""
+    Write-Host "注意：如果程序无法启动，请运行 check_windows_deps.bat 检查依赖" -ForegroundColor Yellow
     Write-Host ""
     
     $runNow = Read-Host "是否立即运行程序？(Y/N)"

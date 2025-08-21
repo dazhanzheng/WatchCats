@@ -28,6 +28,12 @@ try:
     binaries += pyqt6_all[1]  # binaries
     hiddenimports += pyqt6_all[2]  # hiddenimports
     
+    # 额外收集 Qt6 核心组件
+    qt6_all = collect_all('PyQt6.Qt6')
+    datas += qt6_all[0]
+    binaries += qt6_all[1]
+    hiddenimports += qt6_all[2]
+    
     print("✓ PyQt6 collected via collect_all")
 except Exception as e:
     print(f"Warning: Could not use collect_all: {e}")
@@ -69,6 +75,21 @@ try:
             for file in os.listdir(iconengines_path):
                 if file.endswith('.dll'):
                     binaries.append((os.path.join(iconengines_path, file), 'PyQt6/Qt6/plugins/iconengines'))
+        
+        # 添加 Windows 特定的 Qt 二进制文件
+        qt6_bin_path = os.path.join(qt6_path, 'Qt6', 'bin')
+        if os.path.exists(qt6_bin_path):
+            # 关键的 Qt 运行时库
+            important_dlls = [
+                'Qt6Core.dll', 'Qt6Gui.dll', 'Qt6Widgets.dll',
+                'Qt6Network.dll', 'Qt6Svg.dll', 'Qt6PrintSupport.dll',
+                'd3dcompiler_47.dll', 'opengl32sw.dll'
+            ]
+            for dll in important_dlls:
+                dll_path = os.path.join(qt6_bin_path, dll)
+                if os.path.exists(dll_path):
+                    binaries.append((dll_path, '.'))
+                    print(f"✓ Added {dll}")
     else:
         print(f"Warning: Qt plugin directory not found at {plugin_base}")
         

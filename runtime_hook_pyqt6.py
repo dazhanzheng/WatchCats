@@ -7,12 +7,19 @@ PyQt6 运行时钩子 - 确保 Qt 能找到其插件
 
 import os
 import sys
+import platform
 
 def setup_qt_plugins():
     """设置 Qt 插件路径，防止 Windows 闪退"""
     
+    # 记录系统信息用于调试
+    print(f"[Runtime Hook] Platform: {platform.system()} {platform.version()}")
+    print(f"[Runtime Hook] Python: {sys.version}")
+    
     # 只在打包的应用中执行
     if hasattr(sys, 'frozen') and hasattr(sys, '_MEIPASS'):
+        print(f"[Runtime Hook] Bundle path: {sys._MEIPASS}")
+        
         # 构建 Qt 插件路径
         qt_plugin_paths = [
             os.path.join(sys._MEIPASS, 'PyQt6', 'Qt6', 'plugins'),
@@ -49,6 +56,18 @@ def setup_qt_plugins():
             os.environ.setdefault('QT_QUICK_BACKEND', 'software')
             # 尝试使用 ANGLE (DirectX) 而不是 OpenGL
             os.environ.setdefault('QT_OPENGL', 'angle')
+            
+            # 设置 Qt 库路径
+            os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = os.pathsep.join(valid_paths)
+            
+            # 禁用高 DPI 缩放以避免兼容性问题
+            os.environ.setdefault('QT_AUTO_SCREEN_SCALE_FACTOR', '0')
+            os.environ.setdefault('QT_SCALE_FACTOR', '1')
+            
+            # 设置工作目录为 exe 所在目录
+            if hasattr(sys, 'frozen'):
+                os.chdir(os.path.dirname(sys.executable))
+            
             print("[Runtime Hook] Set Windows-specific Qt environment variables")
 
 # 执行设置
