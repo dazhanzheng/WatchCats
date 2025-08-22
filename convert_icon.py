@@ -104,10 +104,11 @@ def main():
     # Define paths
     script_dir = os.path.dirname(os.path.abspath(__file__))
     
-    # Try different possible icon locations
+    # Try different possible icon locations - prioritize baallogo.png for clarity
     possible_icons = [
-        os.path.join(script_dir, "baal", "resources", "cat.png"),  # WatchCats primary icon
-        os.path.join(script_dir, "baal", "resources", "baallogo.png"),  # Legacy icon
+        os.path.join(script_dir, "baal", "resources", "baallogo.png"),  # Primary icon - 512x512 clear logo
+        os.path.join(script_dir, "动作表情拆分", "baallogo.png"),  # Alternative location
+        os.path.join(script_dir, "baal", "resources", "cat.png"),  # WatchCats cat icon
         os.path.join(script_dir, "baal", "resources", "baal_logo.png"),  # Alternative name
         os.path.join(script_dir, "baal", "resources", "app_icon.png"),
         os.path.join(script_dir, "baal", "resources", "icon.png"),
