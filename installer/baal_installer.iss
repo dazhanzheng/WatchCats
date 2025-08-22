@@ -161,17 +161,7 @@ begin
             RegKeyExists(HKEY_LOCAL_MACHINE, 'SOFTWARE\Classes\Installer\Dependencies\VC,redist.x86,x86,14.40,bundle');
 end;
 
-// 检查目录是否存在
-function DirExists(const DirName: String): Boolean;
-begin
-  Result := DirectoryExists(DirName);
-end;
-
-// 检查文件是否存在
-function FileExists(const FileName: String): Boolean;
-begin
-  Result := FileExists(FileName);
-end;
+// 注意: DirExists 和 FileExists 是 Inno Setup 的内置函数，不需要自定义
 
 // 初始化设置
 function InitializeSetup(): Boolean;
@@ -214,13 +204,13 @@ begin
   WizardForm.ProgressGauge.Style := npbstMarquee;
   
   // 安装 64 位运行库
-  if not VCRedist64Installed() and FileExists(ExpandConstant('{tmp}\vc_redist.x64.exe')) then
+  if not VCRedist64Installed() then
   begin
     Exec(ExpandConstant('{tmp}\vc_redist.x64.exe'), '/quiet /norestart', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   end;
   
   // 安装 32 位运行库（某些依赖可能需要）
-  if not VCRedist32Installed() and FileExists(ExpandConstant('{tmp}\vc_redist.x86.exe')) then
+  if not VCRedist32Installed() then
   begin
     Exec(ExpandConstant('{tmp}\vc_redist.x86.exe'), '/quiet /norestart', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   end;
