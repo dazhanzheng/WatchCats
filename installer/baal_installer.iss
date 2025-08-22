@@ -27,6 +27,8 @@ DisableProgramGroupPage=yes
 OutputDir=Output
 OutputBaseFilename=WatchCats-Setup
 SetupIconFile=..\baal\resources\cat.ico
+; 用于检测应用程序是否运行
+AppMutex={#MyAppNameEN}Mutex
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
@@ -100,10 +102,10 @@ Source: "vcredist\vc_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstal
 Source: "vcredist\vc_redist.x86.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall; Check: not VCRedist32Installed
 
 ; 配置文件模板
-Source: "config_template.json"; DestDir: "{app}"; Flags: ignoreversion; Check: FileExists(ExpandConstant('{#SourcePath}\config_template.json'))
+Source: "config_template.json"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 
 ; 用户手册（不包含 README.txt）
-Source: "..\USER_MANUAL.md"; DestDir: "{app}"; DestName: "用户手册.txt"; Flags: ignoreversion; Check: FileExists(ExpandConstant('{#SourcePath}\..\USER_MANUAL.md'))
+Source: "..\USER_MANUAL.md"; DestDir: "{app}"; DestName: "用户手册.txt"; Flags: ignoreversion skipifsourcedoesntexist
 
 [Dirs]
 ; 创建用户数据目录
@@ -115,7 +117,7 @@ Name: "{userappdata}\{#MyAppNameEN}\data"
 ; Start menu shortcuts
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
-Name: "{group}\User Manual"; Filename: "{app}\README.txt"
+Name: "{group}\User Manual"; Filename: "{app}\用户手册.txt"
 Name: "{group}\Configuration Folder"; Filename: "{userappdata}\{#MyAppNameEN}"
 
 ; Desktop shortcut
@@ -265,9 +267,16 @@ begin
                                   '}', False);
     end;
     
-    // 设置环境变量（Qt 插件路径）
-    SetEnvironmentVariable('QT_PLUGIN_PATH', ExpandConstant('{app}\_internal\PyQt6\Qt6\plugins'));
-    SetEnvironmentVariable('QT_QPA_PLATFORM_PLUGIN_PATH', ExpandConstant('{app}\_internal\PyQt6\Qt6\plugins\platforms'));
+    // 创建启动批处理文件，设置环境变量
+    // SetEnvironmentVariable 不是 Inno Setup 的标准函数
+    SaveStringToFile(
+      ExpandConstant('{app}\start_with_env.bat'),
+      '@echo off' + #13#10 +
+      'set QT_PLUGIN_PATH=%~dp0_internal\PyQt6\Qt6\plugins' + #13#10 +
+      'set QT_QPA_PLATFORM_PLUGIN_PATH=%~dp0_internal\PyQt6\Qt6\plugins\platforms' + #13#10 +
+      'start "" "%~dp0{#MyAppExeName}"' + #13#10,
+      False
+    );
   end;
 end;
 
@@ -277,9 +286,7 @@ begin
   NeedsRestart := False;
   Result := '';
   
-  // 检查程序是否正在运行
-  if CheckForMutexes('{#MyAppNameEN}Mutex') then
-  begin
-    Result := 'The application is currently running. Please close it before continuing.';
-  end;
+  // AppMutex 在 [Setup] 中已经配置，Inno Setup 会自动检查
+  // 如果需要手动检查，可以使用 CheckForMutexes 函数
+  // 但需要确保应用程序实际创建了这个 mutex
 end;
