@@ -314,31 +314,111 @@ begin
   end;
 end;
 
-// 安全复制文件的函数
+// 安全复制文件的函数 - 增强版，使用多种方法
 function SafeCopyFile(const SourceFile, DestFile: String): Boolean;
 var
   ErrorCode: Integer;
+  TempCmd: String;
 begin
   Result := False;
   
+  // 记录源文件和目标文件
+  Log('SafeCopyFile: Source = ' + SourceFile);
+  Log('SafeCopyFile: Dest = ' + DestFile);
+  
+  // 检查源文件是否存在
+  if not FileExists(SourceFile) then
+  begin
+    Log('SafeCopyFile: Source file does not exist!');
+    Exit;
+  end;
+  
   try
     // 确保目标目录存在
-    ForceDirectories(ExtractFilePath(DestFile));
+    if not ForceDirectories(ExtractFilePath(DestFile)) then
+    begin
+      Log('SafeCopyFile: Failed to create target directory');
+    end;
     
-    // 先尝试 FileCopy
+    // 方法1: 尝试 FileCopy
+    Log('SafeCopyFile: Trying method 1 - FileCopy');
     Result := FileCopy(SourceFile, DestFile, False);
     
-    // 如果失败，尝试使用 Windows 命令
+    if Result then
+    begin
+      Log('SafeCopyFile: Method 1 succeeded');
+      Exit;
+    end;
+    
+    // 方法2: 使用 copy 命令
     if not Result then
     begin
-      if Exec('cmd.exe', '/C copy /Y "' + SourceFile + '" "' + DestFile + '"', 
-              '', SW_HIDE, ewWaitUntilTerminated, ErrorCode) then
+      Log('SafeCopyFile: Trying method 2 - copy command');
+      TempCmd := '/C copy /Y "' + SourceFile + '" "' + DestFile + '"';
+      if Exec('cmd.exe', TempCmd, '', SW_HIDE, ewWaitUntilTerminated, ErrorCode) then
       begin
         Result := (ErrorCode = 0) and FileExists(DestFile);
+        if Result then
+        begin
+          Log('SafeCopyFile: Method 2 succeeded');
+          Exit;
+        end
+        else
+        begin
+          Log('SafeCopyFile: Method 2 failed with error code: ' + IntToStr(ErrorCode));
+        end;
       end;
     end;
+    
+    // 方法3: 使用 xcopy 命令
+    if not Result then
+    begin
+      Log('SafeCopyFile: Trying method 3 - xcopy command');
+      TempCmd := '"' + SourceFile + '" "' + DestFile + '*" /Y /Q';
+      if Exec('xcopy.exe', TempCmd, '', SW_HIDE, ewWaitUntilTerminated, ErrorCode) then
+      begin
+        Result := (ErrorCode = 0) and FileExists(DestFile);
+        if Result then
+        begin
+          Log('SafeCopyFile: Method 3 succeeded');
+        end
+        else
+        begin
+          Log('SafeCopyFile: Method 3 failed with error code: ' + IntToStr(ErrorCode));
+        end;
+      end;
+    end;
+    
+    // 方法4: 使用 PowerShell
+    if not Result then
+    begin
+      Log('SafeCopyFile: Trying method 4 - PowerShell');
+      TempCmd := '-Command "Copy-Item -Path ''' + SourceFile + ''' -Destination ''' + DestFile + ''' -Force"';
+      if Exec('powershell.exe', TempCmd, '', SW_HIDE, ewWaitUntilTerminated, ErrorCode) then
+      begin
+        Result := (ErrorCode = 0) and FileExists(DestFile);
+        if Result then
+        begin
+          Log('SafeCopyFile: Method 4 succeeded');
+        end
+        else
+        begin
+          Log('SafeCopyFile: Method 4 failed with error code: ' + IntToStr(ErrorCode));
+        end;
+      end;
+    end;
+    
   except
-    Result := False;
+    on E: Exception do
+    begin
+      Log('SafeCopyFile: Exception - ' + E.Message);
+      Result := False;
+    end;
+  end;
+  
+  if not Result then
+  begin
+    Log('SafeCopyFile: All methods failed!');
   end;
 end;
 
