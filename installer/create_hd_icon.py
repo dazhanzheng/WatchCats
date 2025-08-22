@@ -47,12 +47,12 @@ def create_high_quality_ico(input_png, output_ico):
         icon_images.append(resized)
     
     # 保存为 ICO 文件
-    # 使用最大的图像作为主图像，其余作为附加尺寸
-    icon_images[0].save(
+    # 保存所有尺寸到 ICO 文件
+    icon_images[-1].save(  # 使用最大的图像作为基础
         output_ico,
         format='ICO',
-        sizes=[img.size for img in icon_images],
-        append_images=icon_images[1:]
+        sizes=[(img.width, img.height) for img in icon_images],
+        append_images=icon_images[:-1]  # 添加其他所有尺寸
     )
     
     print(f"✓ 创建高质量 ICO: {output_ico}")

@@ -218,6 +218,36 @@ jobs:
           Write-Host "Installer build will be skipped"
         }
 
+    - name: Prepare High-Quality Icons
+      run: |
+        Write-Host "Preparing high-quality icons for installer..."
+        
+        # Ensure we're in the right directory
+        $rootDir = Get-Location
+        $installerDir = Join-Path $rootDir "installer"
+        
+        # Check if prepare_icons.ps1 exists
+        $iconScript = Join-Path $installerDir "prepare_icons.ps1"
+        if (Test-Path $iconScript) {
+          Write-Host "Running icon preparation script..."
+          Set-Location $installerDir
+          .\prepare_icons.ps1
+          Set-Location $rootDir
+        } else {
+          Write-Host "[WARNING] prepare_icons.ps1 not found, will use fallback"
+        }
+        
+        # Verify icons were created
+        $iconPath = Join-Path $installerDir "icons\WatchCats.ico"
+        if (Test-Path $iconPath) {
+          Write-Host "[OK] Icons prepared successfully"
+          $iconInfo = Get-Item $iconPath
+          Write-Host "  Icon size: $([math]::Round($iconInfo.Length / 1KB, 2)) KB"
+        } else {
+          Write-Host "[ERROR] Icon preparation failed!"
+          exit 1
+        }
+
     - name: Build Inno Setup Installer
       run: |
         Write-Host "Building Inno Setup installer..."

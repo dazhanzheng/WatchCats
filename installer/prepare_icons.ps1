@@ -1,20 +1,30 @@
 # 在 Windows 构建环境中准备高质量图标
-Write-Host "Preparing high-quality icons for Windows installer..."
+Write-Host "========================================"
+Write-Host "Preparing high-quality icons for Windows installer"
+Write-Host "========================================"
 
 # 确保在正确的目录
 $installerDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+Write-Host "Installer directory: $installerDir"
 Set-Location $installerDir
 
 # 创建 icons 目录
 $iconsDir = Join-Path $installerDir "icons"
 if (!(Test-Path $iconsDir)) {
     New-Item -ItemType Directory -Path $iconsDir | Out-Null
-    Write-Host "Created icons directory"
+    Write-Host "Created icons directory: $iconsDir"
+} else {
+    Write-Host "Icons directory exists: $iconsDir"
 }
 
+# 检查 Python 和 pip
+Write-Host "Checking Python environment..."
+python --version
+pip --version
+
 # 安装 Pillow（如果需要）
-Write-Host "Installing Pillow..."
-pip install Pillow | Out-Null
+Write-Host "Ensuring Pillow is installed..."
+pip install --quiet Pillow
 
 # 创建 Python 脚本来生成图标
 $iconScript = @'
@@ -120,28 +130,63 @@ Remove-Item generate_icons.py
 # 检查是否成功生成
 $icoPath = Join-Path $iconsDir "WatchCats.ico"
 if (Test-Path $icoPath) {
-    Write-Host "[OK] Icon generated successfully: $icoPath"
+    Write-Host ""
+    Write-Host "[SUCCESS] Icon generated successfully!"
+    Write-Host "Location: $icoPath"
     $iconInfo = Get-Item $icoPath
-    Write-Host "   Size: $($iconInfo.Length) bytes"
-} else {
-    Write-Host "[ERROR] Failed to generate icon"
+    Write-Host "Size: $($iconInfo.Length) bytes"
     
-    # 创建一个备用的空 ICO 文件
-    Write-Host "Creating fallback icon..."
+    # 列出所有生成的图标文件
+    Write-Host ""
+    Write-Host "Generated icon files:"
+    Get-ChildItem $iconsDir | ForEach-Object {
+        Write-Host "  - $($_.Name) ($($_.Length) bytes)"
+    }
+    Write-Host ""
+    Write-Host "========================================"
+    Write-Host "Icon preparation completed successfully!"
+    Write-Host "========================================"
+    exit 0
+} else {
+    Write-Host ""
+    Write-Host "[ERROR] Failed to generate icon file!"
+    Write-Host "Expected: $icoPath"
+    Write-Host ""
+    
+    # 尝试创建备用图标
+    Write-Host "Attempting to create fallback icon..."
     
     # 使用 Python 创建一个简单的 ICO
     $fallbackScript = @'
 from PIL import Image
 import os
 os.makedirs("icons", exist_ok=True)
-img = Image.new('RGBA', (32, 32), (60, 60, 60, 255))
-img.save("icons/WatchCats.ico", format='ICO')
-print("Created fallback icon")
+# 创建一个更好看的默认图标
+img = Image.new('RGBA', (256, 256), (60, 60, 60, 255))
+from PIL import ImageDraw
+draw = ImageDraw.Draw(img)
+# 画一个圆形作为默认图标
+draw.ellipse([64, 64, 192, 192], fill=(100, 150, 200, 255))
+# 保存多种尺寸
+sizes = [(16,16), (32,32), (48,48), (64,64), (128,128), (256,256)]
+images = []
+for size in sizes:
+    resized = img.resize(size, Image.Resampling.LANCZOS)
+    images.append(resized)
+images[0].save("icons/WatchCats.ico", format='ICO', sizes=[s for s in sizes], append_images=images[1:])
+print("Created fallback icon with multiple resolutions")
 '@
     
     $fallbackScript | Out-File -FilePath "fallback_icon.py" -Encoding UTF8
     python fallback_icon.py
     Remove-Item fallback_icon.py
+    
+    # 再次检查
+    if (Test-Path $icoPath) {
+        Write-Host "[OK] Fallback icon created successfully"
+        exit 0
+    } else {
+        Write-Host "[FATAL] Could not create any icon file!"
+        exit 1
+    }
 }
-
-Write-Host "Icon preparation completed"

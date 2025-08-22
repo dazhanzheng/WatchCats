@@ -26,14 +26,8 @@ DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=Output
 OutputBaseFilename=WatchCats-Setup
-; 图标文件会在构建时生成
-; 如果图标文件不存在，使用默认图标
-#ifexist "icons\WatchCats.ico"
+; 高质量图标文件（构建时必须生成）
 SetupIconFile=icons\WatchCats.ico
-#else
-; 如果没有图标文件，注释掉这一行让 Inno Setup 使用默认图标
-; SetupIconFile=icons\WatchCats.ico
-#endif
 ; 用于检测应用程序是否运行
 AppMutex={#MyAppNameEN}Mutex
 Compression=lzma2/max
@@ -98,8 +92,8 @@ Name: "startupicon"; Description: "{cm:StartupIcon}"; GroupDescription: "{cm:Add
 ; 主程序
 Source: "..\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 
-; 高质量图标文件（如果存在）
-Source: "icons\WatchCats.ico"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+; 高质量图标文件（必须存在）
+Source: "icons\WatchCats.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "icons\WatchCats_256.png"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "icons\WatchCats_512.png"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 
