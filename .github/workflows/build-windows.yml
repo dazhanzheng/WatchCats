@@ -318,6 +318,28 @@ jobs:
         } else {
           Write-Host "Found ISCC at: $isccPath"
           
+          # Download Chinese language file for Inno Setup
+          $langDir = "C:\Program Files (x86)\Inno Setup 6\Languages"
+          if (!(Test-Path $langDir)) {
+            $langDir = "C:\Program Files\Inno Setup 6\Languages"
+          }
+          
+          if (Test-Path $langDir) {
+            $chineseLangFile = Join-Path $langDir "ChineseSimplified.isl"
+            if (!(Test-Path $chineseLangFile)) {
+              Write-Host "Downloading Chinese language file for Inno Setup..."
+              try {
+                # Download from Inno Setup official repository
+                $langUrl = "https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/Unofficial/ChineseSimplified.isl"
+                Invoke-WebRequest -Uri $langUrl -OutFile $chineseLangFile -UseBasicParsing
+                Write-Host "Chinese language file downloaded"
+              } catch {
+                Write-Host "[WARNING] Failed to download Chinese language file: $_"
+                Write-Host "Installer will use English only"
+              }
+            }
+          }
+          
           # Download VC++ redistributables if not present
           $vcredistDir = "installer\vcredist"
           if (!(Test-Path $vcredistDir)) {

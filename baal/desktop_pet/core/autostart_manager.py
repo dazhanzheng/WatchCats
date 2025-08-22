@@ -14,7 +14,7 @@ class AutostartManager:
     
     def __init__(self):
         """初始化管理器"""
-        self.app_name = "BaalDesktopPet"
+        self.app_name = "WatchCats"
         self.app_path = self._get_app_path()
     
     def _get_app_path(self):

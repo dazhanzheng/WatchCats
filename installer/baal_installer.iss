@@ -37,7 +37,7 @@ PrivilegesRequiredOverridesAllowed=dialog
 UninstallDisplayIcon={app}\{#MyAppExeName}
 
 ; 界面设置
-ShowLanguageDialog=auto
+ShowLanguageDialog=yes
 LanguageDetectionMethod=uilanguage
 ; Wizard images (generated during build)
 WizardImageFile=installer_wizard.bmp
@@ -58,9 +58,20 @@ VersionInfoCopyright=Copyright (C) 2025 {#MyAppPublisher}
 MinVersion=10.0.17763
 
 [Languages]
+Name: "chinese"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [CustomMessages]
+; Chinese messages
+chinese.LaunchProgram=启动 {#MyAppName}
+chinese.CreateDesktopIcon=创建桌面快捷方式(&D)
+chinese.CreateQuickLaunchIcon=创建快速启动栏快捷方式(&Q)
+chinese.InstallVCRedist=正在安装 Visual C++ 运行库...
+chinese.CheckingDependencies=正在检查系统依赖项...
+chinese.ConfiguringApp=正在配置应用程序...
+chinese.StartupIcon=开机自动启动
+chinese.StartupIconDesc=设置 {#MyAppName} 开机自动启动
+
 ; English messages
 english.LaunchProgram=Launch {#MyAppName}
 english.CreateDesktopIcon=Create a &desktop shortcut
@@ -68,11 +79,13 @@ english.CreateQuickLaunchIcon=Create a &Quick Launch shortcut
 english.InstallVCRedist=Installing Visual C++ Runtime...
 english.CheckingDependencies=Checking system dependencies...
 english.ConfiguringApp=Configuring application...
+english.StartupIcon=Start automatically at Windows startup
+english.StartupIconDesc=Configure {#MyAppName} to start automatically
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked; OnlyBelowVersion: 6.1; Check: not IsWin64
-Name: "startupicon"; Description: "Start automatically at Windows startup"; GroupDescription: "Additional options:"; Flags: unchecked
+Name: "startupicon"; Description: "{cm:StartupIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
 ; 主程序
@@ -126,10 +139,12 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 ; Quick Launch shortcut
 Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: quicklaunchicon
 
-; Startup shortcut
-Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: startupicon; Parameters: "--minimized"
+; Startup shortcut (removed - using registry instead)
 
 [Registry]
+; 开机自启动（与应用内部的 AutostartManager 保持一致）
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#MyAppNameEN}"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: startupicon; Flags: uninsdeletevalue
+
 ; 文件关联（可选）
 Root: HKA; Subkey: "Software\Classes\{#MyAppAssocExt}\OpenWithProgids"; ValueType: string; ValueName: "{#MyAppAssocName}"; ValueData: ""; Flags: uninsdeletevalue
 Root: HKA; Subkey: "Software\Classes\{#MyAppAssocName}"; ValueType: string; ValueName: ""; ValueData: "{#MyAppAssocName}"; Flags: uninsdeletekey
@@ -176,7 +191,10 @@ begin
   // 检查是否已安装旧版本
   if RegKeyExists(HKEY_CURRENT_USER, 'Software\{#MyAppPublisher}\{#MyAppNameEN}') then
   begin
-    Message := 'Previous version detected. Continue with installation?';
+    if GetUILanguage = $0804 then // 中文
+      Message := '检测到已安装旧版本。是否继续安装？'
+    else
+      Message := 'Previous version detected. Continue with installation?';
       
     if MsgBox(Message, mbConfirmation, MB_YESNO) = IDNO then
     begin
@@ -188,7 +206,10 @@ begin
   // 检查 Visual C++ Redistributable
   if not VCRedist64Installed() then
   begin
-    Message := 'Visual C++ Redistributable not detected.' + #13#10 + 'The installer will install the required runtime.';
+    if GetUILanguage = $0804 then // 中文
+      Message := '未检测到 Visual C++ 运行库。' + #13#10 + '安装程序将自动安装所需的运行库。'
+    else
+      Message := 'Visual C++ Redistributable not detected.' + #13#10 + 'The installer will install the required runtime.';
       
     MsgBox(Message, mbInformation, MB_OK);
   end;
@@ -222,10 +243,18 @@ end;
 
 // Uninstall confirmation
 function InitializeUninstall(): Boolean;
+var
+  Msg: String;
 begin
-  Result := MsgBox('Are you sure you want to uninstall {#MyAppName}?' + #13#10 + 
-                   'Note: User data and settings will be preserved.', 
-                   mbConfirmation, MB_YESNO) = IDYES;
+  // 根据系统语言选择消息
+  if GetUILanguage = $0804 then // 中文
+    Msg := '您确定要卸载 {#MyAppName} 吗？' + #13#10 + 
+           '注意：用户数据和设置将被保留。'
+  else
+    Msg := 'Are you sure you want to uninstall {#MyAppName}?' + #13#10 + 
+           'Note: User data and settings will be preserved.';
+  
+  Result := MsgBox(Msg, mbConfirmation, MB_YESNO) = IDYES;
 end;
 
 // 安装步骤变化时的操作
@@ -263,7 +292,12 @@ begin
       SaveStringToFile(ConfigPath, '{' + #13#10 +
                                   '  "version": "' + '{#MyAppVersion}' + '",' + #13#10 +
                                   '  "first_run": true,' + #13#10 +
-                                  '  "language": "zh_CN"' + #13#10 +
+                                  '  "language": "zh_CN",' + #13#10 +
+                                  '  "api_keys": {' + #13#10 +
+                                  '    "volcengine_api_key": "26a86139-4cfe-4a03-8b53-c99c42ce369c",' + #13#10 +
+                                  '    "volcengine_base_url": "https://ark.cn-beijing.volces.com/api/v3",' + #13#10 +
+                                  '    "volcengine_model": "ep-20241219002916-6m8sk"' + #13#10 +
+                                  '  }' + #13#10 +
                                   '}', False);
     end;
     
