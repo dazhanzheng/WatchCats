@@ -294,9 +294,9 @@ begin
                                   '  "version": "' + '{#MyAppVersion}' + '",' + #13#10 +
                                   '  "first_run": true,' + #13#10 +
                                   '  "language": "zh_CN",' + #13#10 +
-                                  '  "api_key": "26a86139-4cfe-4a03-8b53-c99c42ce369c",' + #13#10 +
+                                  '  "api_key": "6be4b0c1-8e71-4530-908a-cbe4b48a9a07",' + #13#10 +
                                   '  "base_url": "https://ark.cn-beijing.volces.com/api/v3",' + #13#10 +
-                                  '  "model": "ep-20241222163908-mmtfh"' + #13#10 +
+                                  '  "model": "doubao-seed-1-6-flash-250715"' + #13#10 +
                                   '}', False);
     end;
     
