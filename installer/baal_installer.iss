@@ -501,21 +501,46 @@ begin
     end;
   end;
   
-  // 迁移 chat_history.json
+  // 迁移 chat_history.json 到新的 conversation_history.json
   if FileExists(OldConfigPath + '\chat_history.json') then
   begin
     Log('Migration: Found chat_history.json');
-    if not FileExists(NewConfigPath + '\chat_history.json') then
+    // 新版本使用 conversation_history.json
+    if not FileExists(NewConfigPath + '\conversation_history.json') then
     begin
-      if SafeCopyFile(OldConfigPath + '\chat_history.json', NewConfigPath + '\chat_history.json') then
+      // 注意：文件名改变了
+      if SafeCopyFile(OldConfigPath + '\chat_history.json', NewConfigPath + '\conversation_history.json') then
       begin
         FilesCopied := FilesCopied + 1;
-        Log('Migration: Successfully copied chat_history.json');
+        Log('Migration: Successfully copied chat_history.json as conversation_history.json');
       end
       else
       begin
         FailedFiles := FailedFiles + 'chat_history.json, ';
         Log('Migration: Failed to copy chat_history.json');
+      end;
+    end
+    else
+    begin
+      Log('Migration: conversation_history.json already exists in new location');
+    end;
+  end;
+  
+  // 也检查是否有旧的 conversation_history.json
+  if FileExists(OldConfigPath + '\conversation_history.json') then
+  begin
+    Log('Migration: Found conversation_history.json');
+    if not FileExists(NewConfigPath + '\conversation_history.json') then
+    begin
+      if SafeCopyFile(OldConfigPath + '\conversation_history.json', NewConfigPath + '\conversation_history.json') then
+      begin
+        FilesCopied := FilesCopied + 1;
+        Log('Migration: Successfully copied conversation_history.json');
+      end
+      else
+      begin
+        FailedFiles := FailedFiles + 'conversation_history.json, ';
+        Log('Migration: Failed to copy conversation_history.json');
       end;
     end;
   end;

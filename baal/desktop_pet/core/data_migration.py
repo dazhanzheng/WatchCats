@@ -77,19 +77,20 @@ class DataMigration:
             # 确保新目录存在
             self.new_dir.mkdir(parents=True, exist_ok=True)
             
-            # 需要迁移的文件列表
+            # 需要迁移的文件列表（包括文件名映射）
             files_to_migrate = [
-                'config.json',          # 配置文件
-                'chat_history.json',    # 聊天记录
-                'schedules.json',       # 日程
-                'goals.json',          # 目标
-                'supervision_config.json',  # 监督模式配置
+                ('config.json', 'config.json'),          # 配置文件
+                ('chat_history.json', 'conversation_history.json'),    # 聊天记录（重命名）
+                ('conversation_history.json', 'conversation_history.json'),  # 新格式的聊天记录
+                ('schedules.json', 'schedules.json'),       # 日程
+                ('goals.json', 'goals.json'),          # 目标
+                ('supervision_config.json', 'supervision_config.json'),  # 监督模式配置
             ]
             
             # 迁移单个文件
-            for file_name in files_to_migrate:
-                old_file = self.old_dir / file_name
-                new_file = self.new_dir / file_name
+            for old_name, new_name in files_to_migrate:
+                old_file = self.old_dir / old_name
+                new_file = self.new_dir / new_name
                 
                 if old_file.exists() and not new_file.exists():
                     try:
@@ -104,11 +105,14 @@ class DataMigration:
                         # 复制文件权限和时间戳
                         shutil.copystat(old_file, new_file)
                         
-                        result['files_migrated'].append(file_name)
+                        if old_name != new_name:
+                            result['files_migrated'].append(f"{old_name} -> {new_name}")
+                        else:
+                            result['files_migrated'].append(old_name)
                     except PermissionError as e:
-                        result['errors'].append(f"Permission denied for {file_name}: {str(e)}")
+                        result['errors'].append(f"Permission denied for {old_name}: {str(e)}")
                     except Exception as e:
-                        result['errors'].append(f"Failed to migrate {file_name}: {str(e)}")
+                        result['errors'].append(f"Failed to migrate {old_name}: {str(e)}")
             
             # 迁移 memory 文件夹
             old_memory = self.old_dir / 'memory'
