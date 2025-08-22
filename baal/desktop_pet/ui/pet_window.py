@@ -695,6 +695,8 @@ class PetWindow(QWidget):
         self.chat_bubble.show_message(welcome_msg)
         # 设置气泡位置（使用默认位置）
         self.chat_bubble.set_position_relative_to(self, use_offset=False)
+        # 启动30秒自动隐藏计时器
+        self._start_bubble_auto_hide_timer(30000)  # 30秒后自动隐藏
     
     def _get_return_greeting(self):
         """获取用户回归时的问候语"""
@@ -905,6 +907,8 @@ class PetWindow(QWidget):
                 self._update_emotion(response[:4])
                 response = response[4:].strip()
             self.chat_bubble.show_message(response)
+            # 重置自动隐藏计时器（预设消息也需要自动隐藏）
+            self._reset_bubble_auto_hide_timer()
             return
         
         # 延迟显示AI回复（让用户消息先显示）
@@ -1090,6 +1094,8 @@ class PetWindow(QWidget):
                     self._update_emotion(response[:4])
                     response = response[4:].strip()
                 self.chat_bubble.show_message(response)
+                # 启动30秒自动隐藏计时器（人设切换提示）
+                self._start_bubble_auto_hide_timer(30000)
     
     def _toggle_visibility(self):
         """切换窗口可见性"""
@@ -1152,6 +1158,8 @@ class PetWindow(QWidget):
                 self._update_emotion(response[:4])
                 response = response[4:].strip()
             self.chat_bubble.show_message(response)
+            # 启动30秒自动隐藏计时器（位置重置提示）
+            self._start_bubble_auto_hide_timer(30000)
     
     
     def _toggle_start_minimized(self, checked):
@@ -1190,6 +1198,8 @@ class PetWindow(QWidget):
                     self._update_emotion(response[:4])
                     response = response[4:].strip()
                 self.chat_bubble.show_message(response)
+                # 启动30秒自动隐藏计时器（置顶启用提示）
+                self._start_bubble_auto_hide_timer(30000)
             else:
                 response = PresetResponseManager.get_response(
                     self.persona_manager.current_level,
@@ -1199,6 +1209,8 @@ class PetWindow(QWidget):
                     self._update_emotion(response[:4])
                     response = response[4:].strip()
                 self.chat_bubble.show_message(response)
+                # 启动30秒自动隐藏计时器（置顶禁用提示）
+                self._start_bubble_auto_hide_timer(30000)
     
     def _update_window_flags(self):
         """更新窗口标志（主要用于切换置顶状态）"""
@@ -1549,6 +1561,8 @@ class PetWindow(QWidget):
             # 直接关闭监督模式
             self.supervision_mode.stop_supervision()
             self.chat_bubble.show_message("监督模式已关闭。")
+            # 启动30秒自动隐藏计时器（监督关闭提示）
+            self._start_bubble_auto_hide_timer(30000)
             self._update_supervision_button_style()
         else:
             # 检查是否已有保存的目标
@@ -1595,6 +1609,8 @@ class PetWindow(QWidget):
                 self._update_emotion(response[:4])
                 response = response[4:].strip()
             self.chat_bubble.show_message(response)
+            # 启动30秒自动隐藏计时器（监督停止提示）
+            self._start_bubble_auto_hide_timer(30000)
         else:
             # 显示监督设置对话框
             dialog = SupervisionDialog(
@@ -1621,10 +1637,14 @@ class PetWindow(QWidget):
                 self._update_emotion(response[:4])
                 response = response[4:].strip()
             self.chat_bubble.show_message(response)
+            # 启动30秒自动隐藏计时器（监督启动提示）
+            self._start_bubble_auto_hide_timer(30000)
             self._update_supervision_button_style()
         else:
             # 监督模式启动失败，提示用户配置API
             self.chat_bubble.show_message("监督模式需要配置API密钥。即将打开设置...")
+            # 启动30秒自动隐藏计时器（API配置提示）
+            self._start_bubble_auto_hide_timer(30000)
             # 延迟一下让用户看到消息
             QTimer.singleShot(get_timer_interval('settings_open_delay'), self._open_settings_for_supervision)
     
@@ -1655,11 +1675,17 @@ class PetWindow(QWidget):
                         self._update_emotion(response[:4])
                         response = response[4:].strip()
                     self.chat_bubble.show_message(response)
+                    # 启动30秒自动隐藏计时器（监督启动提示）
+                    self._start_bubble_auto_hide_timer(30000)
                 else:
                     self.chat_bubble.show_message("API配置可能有误，请检查设置。")
+                    # 启动30秒自动隐藏计时器（错误提示）
+                    self._start_bubble_auto_hide_timer(30000)
         else:
             # 用户取消了设置
             self.chat_bubble.show_message("已取消监督模式。")
+            # 启动30秒自动隐藏计时器（取消提示）
+            self._start_bubble_auto_hide_timer(30000)
             # 清除待处理的任务
             if hasattr(self, '_pending_supervision_goal'):
                 delattr(self, '_pending_supervision_goal')
