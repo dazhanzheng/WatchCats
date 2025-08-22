@@ -428,7 +428,7 @@ jobs:
         path: |
           dist\WatchCats-Windows.zip
           dist\WatchCats-Setup.exe
-        retention-days: 30
+        retention-days: 3  # 仓库限制最多 3 天
 
     - name: Create Release (if tagged)
       if: startsWith(github.ref, 'refs/tags/')
