@@ -286,6 +286,25 @@ jobs:
       run: |
         Write-Host "Building Inno Setup installer..."
         
+        # Generate placeholder images for installer wizard
+        Write-Host "Creating placeholder installer images..."
+        pip install pillow
+        
+        $pythonScript = @'
+        from PIL import Image
+        # Create wizard image (164x314)
+        wizard = Image.new('RGB', (164, 314), color='#3C3C3C')
+        wizard.save('installer/installer_wizard.bmp')
+        # Create small image (55x58)
+        small = Image.new('RGB', (55, 58), color='#3C3C3C')
+        small.save('installer/installer_small.bmp')
+        print("Created placeholder images")
+        '@
+        
+        $pythonScript | Out-File -FilePath "create_images.py" -Encoding UTF8
+        python create_images.py
+        Remove-Item create_images.py
+        
         # Find ISCC.exe
         $isccPath = ""
         if (Test-Path "C:\Program Files (x86)\Inno Setup 6\ISCC.exe") {

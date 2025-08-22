@@ -37,6 +37,7 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 ; 界面设置
 ShowLanguageDialog=auto
 LanguageDetectionMethod=uilanguage
+; Wizard images (generated during build)
 WizardImageFile=installer_wizard.bmp
 WizardSmallImageFile=installer_small.bmp
 DisableWelcomePage=no
