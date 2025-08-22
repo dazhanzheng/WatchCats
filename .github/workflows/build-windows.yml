@@ -252,6 +252,95 @@ jobs:
           Write-Host "   Size: $([math]::Round($zipInfo.Length / 1MB, 2)) MB"
         }
 
+    - name: Install Inno Setup
+      run: |
+        Write-Host "Installing Inno Setup..."
+        # Download Inno Setup installer
+        $url = "https://jrsoftware.org/download.php/is.exe"
+        $output = "$env:TEMP\innosetup.exe"
+        
+        try {
+          # Download with retry logic
+          $maxRetries = 3
+          for ($i = 1; $i -le $maxRetries; $i++) {
+            try {
+              Write-Host "Downloading Inno Setup (attempt $i/$maxRetries)..."
+              Invoke-WebRequest -Uri $url -OutFile $output -UseBasicParsing
+              break
+            } catch {
+              if ($i -eq $maxRetries) { throw }
+              Start-Sleep -Seconds 2
+            }
+          }
+          
+          # Install silently
+          Write-Host "Installing Inno Setup silently..."
+          Start-Process -FilePath $output -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-" -Wait
+          Write-Host "Inno Setup installed successfully"
+        } catch {
+          Write-Host "[WARNING] Failed to install Inno Setup: $_"
+          Write-Host "Installer build will be skipped"
+        }
+
+    - name: Build Inno Setup Installer
+      run: |
+        Write-Host "Building Inno Setup installer..."
+        
+        # Find ISCC.exe
+        $isccPath = ""
+        if (Test-Path "C:\Program Files (x86)\Inno Setup 6\ISCC.exe") {
+          $isccPath = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+        } elseif (Test-Path "C:\Program Files\Inno Setup 6\ISCC.exe") {
+          $isccPath = "C:\Program Files\Inno Setup 6\ISCC.exe"
+        }
+        
+        if ($isccPath -eq "") {
+          Write-Host "[WARNING] ISCC.exe not found, skipping installer build"
+        } else {
+          Write-Host "Found ISCC at: $isccPath"
+          
+          # Download VC++ redistributables if not present
+          $vcredistDir = "installer\vcredist"
+          if (!(Test-Path $vcredistDir)) {
+            New-Item -ItemType Directory -Force -Path $vcredistDir | Out-Null
+          }
+          
+          # Download VC++ redistributables
+          $vcFiles = @(
+            @{url="https://aka.ms/vs/17/release/vc_redist.x64.exe"; file="vc_redist.x64.exe"},
+            @{url="https://aka.ms/vs/17/release/vc_redist.x86.exe"; file="vc_redist.x86.exe"}
+          )
+          
+          foreach ($vc in $vcFiles) {
+            $vcPath = Join-Path $vcredistDir $vc.file
+            if (!(Test-Path $vcPath)) {
+              Write-Host "Downloading $($vc.file)..."
+              try {
+                Invoke-WebRequest -Uri $vc.url -OutFile $vcPath -UseBasicParsing
+                Write-Host "Downloaded $($vc.file)"
+              } catch {
+                Write-Host "[WARNING] Failed to download $($vc.file): $_"
+              }
+            }
+          }
+          
+          # Build installer
+          try {
+            & $isccPath /Q /O"dist" "installer\baal_installer.iss"
+            
+            # Check if installer was created
+            if (Test-Path "dist\WatchCats-Setup.exe") {
+              $installerInfo = Get-Item "dist\WatchCats-Setup.exe"
+              Write-Host "[OK] Installer created: $($installerInfo.Name)"
+              Write-Host "   Size: $([math]::Round($installerInfo.Length / 1MB, 2)) MB"
+            } else {
+              Write-Host "[WARNING] Installer was not created"
+            }
+          } catch {
+            Write-Host "[WARNING] Installer build failed: $_"
+          }
+        }
+
     - name: Run Automated Tests
       run: |
         Write-Host "========================================"
@@ -297,6 +386,7 @@ jobs:
         name: windows-package
         path: |
           dist\WatchCats-Windows.zip
+          dist\WatchCats-Setup.exe
         retention-days: 30
 
     - name: Create Release (if tagged)
@@ -305,11 +395,13 @@ jobs:
       with:
         files: |
           dist\WatchCats-Windows.zip
+          dist\WatchCats-Setup.exe
         body: |
           ## 下载说明 / Download Instructions
           
           ### Windows用户：
-          - **ZIP包**: `WatchCats-Windows.zip` - 解压即用
+          - **安装版**: `WatchCats-Setup.exe` - 推荐，自动安装依赖
+          - **便携版**: `WatchCats-Windows.zip` - 解压即用
           - 包含所有必要的资源文件和表情素材
           
           ### 系统要求：

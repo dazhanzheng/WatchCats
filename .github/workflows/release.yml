@@ -1,6 +1,9 @@
-name: Release Build
+name: Create Release
 
 on:
+  push:
+    tags:
+      - 'v*.*.*'
   workflow_dispatch:
     inputs:
       version:
@@ -12,23 +15,16 @@ on:
         required: true
         type: boolean
         default: false
-  
-  push:
-    tags:
-      - 'v*.*.*'
-
-env:
-  PYTHON_VERSION: '3.9'
 
 jobs:
   create-release:
     name: Create Release
     runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
-      version: ${{ steps.get_version.outputs.VERSION }}
     
     steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
     - name: Get version
       id: get_version
       run: |
@@ -40,18 +36,36 @@ jobs:
         echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
         echo "Version: $VERSION"
     
+    - name: Wait for build-windows workflow
+      uses: lewagon/wait-on-check-action@v1.3.3
+      with:
+        ref: ${{ github.ref }}
+        check-name: 'Build Windows Package'
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+        wait-interval: 30
+        allowed-conclusions: success,skipped
+    
+    - name: Download Windows artifacts
+      uses: dawidd6/action-download-artifact@v3
+      with:
+        workflow: build-windows.yml
+        workflow_conclusion: success
+        name: windows-package
+        path: ./artifacts
+    
     - name: Create Release
       id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      uses: softprops/action-gh-release@v2
       with:
         tag_name: v${{ steps.get_version.outputs.VERSION }}
-        release_name: Release v${{ steps.get_version.outputs.VERSION }}
+        name: Release v${{ steps.get_version.outputs.VERSION }}
         draft: true
         prerelease: ${{ github.event.inputs.prerelease || contains(steps.get_version.outputs.VERSION, 'beta') || contains(steps.get_version.outputs.VERSION, 'alpha') }}
+        files: |
+          ./artifacts/WatchCats-Windows.zip
+          ./artifacts/WatchCats-Setup.exe
         body: |
-          ## 🎉 Baal宠物助手 v${{ steps.get_version.outputs.VERSION }}
+          ## 🎉 WatchCats v${{ steps.get_version.outputs.VERSION }}
           
           ### ✨ 新功能
           - 功能1
@@ -64,257 +78,24 @@ jobs:
           ### 📦 下载说明
           
           #### Windows用户：
-          - **安装版** (`WatchCats-Setup.exe`): 推荐，包含开始菜单和卸载程序
-          - **便携版** (`WatchCats.exe`): 无需安装，直接运行
-          - **NSIS安装版** (`WatchCats-nsis-setup.exe`): 备选安装程序
-          
-          #### macOS用户：
-          - **DMG安装包** (`WatchCats.dmg`): 拖拽安装
-          - **APP包** (`WatchCats.app.zip`): 解压后直接运行
+          - **安装版** (`WatchCats-Setup.exe`): 推荐，自动安装依赖
+          - **便携版** (`WatchCats-Windows.zip`): 解压即用
           
           ### 💻 系统要求
           - **Windows**: Windows 10 1903 或更高版本
-          - **macOS**: macOS 11.0 或更高版本
           - 需要网络连接（AI功能）
           
-          ### 📝 更新日志
-          查看完整更新日志: [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md)
-
-  build-windows:
-    name: Build Windows
-    needs: create-release
-    runs-on: windows-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-        cache: 'pip'
-
-    - name: Install dependencies
-      run: |
-        python -m venv venv
-        .\venv\Scripts\activate
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pyinstaller==6.11.1 pillow
-
-    - name: Convert icon
-      run: |
-        .\venv\Scripts\activate
-        python convert_icon.py
-
-    - name: Update version in spec
-      run: |
-        $version = "${{ needs.create-release.outputs.version }}"
-        $content = Get-Content baal_windows.spec -Raw
-        $content = $content -replace 'VERSION = ".*"', "VERSION = `"$version`""
-        Set-Content baal_windows.spec $content
-
-    - name: Build with PyInstaller
-      run: |
-        .\venv\Scripts\activate
-        pyinstaller --clean --noconfirm baal_windows.spec
-
-    - name: Install Inno Setup
-      run: |
-        # Download and install Inno Setup
-        $url = "https://jrsoftware.org/download.php/is.exe"
-        $output = "innosetup.exe"
-        
-        # Try primary URL, fallback to GitHub releases if needed
-        try {
-          Invoke-WebRequest -Uri $url -OutFile $output -UseBasicParsing
-        } catch {
-          Write-Host "Primary download failed, trying GitHub release..."
-          $url = "https://github.com/jrsoftware/issrc/releases/download/is-6.2.2/innosetup-6.2.2.exe"
-          Invoke-WebRequest -Uri $url -OutFile $output -UseBasicParsing
-        }
-        
-        Start-Process -FilePath $output -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-" -Wait
-
-    - name: Update version in Inno Setup script
-      run: |
-        $version = "${{ needs.create-release.outputs.version }}"
-        $content = Get-Content installer\baal_installer.iss -Raw
-        $content = $content -replace '#define MyAppVersion ".*"', "#define MyAppVersion `"$version`""
-        Set-Content installer\baal_installer.iss $content
-
-    - name: Build Inno Setup installer
-      run: |
-        # Find and run ISCC
-        $isccPath = ""
-        if (Test-Path "C:\Program Files (x86)\Inno Setup 6\ISCC.exe") {
-          $isccPath = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
-        } elseif (Test-Path "C:\Program Files\Inno Setup 6\ISCC.exe") {
-          $isccPath = "C:\Program Files\Inno Setup 6\ISCC.exe"
-        } else {
-          Write-Host "Error: ISCC.exe not found!"
-          exit 1
-        }
-        
-        Write-Host "Using ISCC at: $isccPath"
-        & "$isccPath" /Q installer\baal_installer.iss
-
-    - name: Install NSIS
-      run: |
-        choco install nsis -y
-        echo "C:\Program Files (x86)\NSIS" >> $env:GITHUB_PATH
-
-    - name: Update version in NSIS script
-      run: |
-        $version = "${{ needs.create-release.outputs.version }}"
-        $content = Get-Content installer\baal_installer.nsi -Raw
-        $content = $content -replace '!define PRODUCT_VERSION ".*"', "!define PRODUCT_VERSION `"$version`""
-        Set-Content installer\baal_installer.nsi $content
-
-    - name: Build NSIS installer
-      run: |
-        & "C:\Program Files (x86)\NSIS\makensis.exe" installer\baal_installer.nsi
-
-    - name: Create checksums
-      run: |
-        $files = @(
-          "dist\WatchCats.exe",
-          "installer\Output\WatchCats-Setup.exe",
-          "installer\Output\WatchCats-Setup.exe"
-        )
-        foreach ($file in $files) {
-          if (Test-Path $file) {
-            $hash = Get-FileHash $file -Algorithm SHA256
-            "$($hash.Hash)  $(Split-Path $file -Leaf)" | Out-File "$file.sha256"
-          }
-        }
-
-    - name: Upload portable exe
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: dist\Baal宠物助手.exe
-        asset_name: Baal宠物助手-v${{ needs.create-release.outputs.version }}.exe
-        asset_content_type: application/octet-stream
-
-    - name: Upload Inno Setup installer
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: installer\Output\WatchCats-Setup.exe
-        asset_name: WatchCats-Setup-v${{ needs.create-release.outputs.version }}.exe
-        asset_content_type: application/octet-stream
-
-    - name: Upload NSIS installer
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: installer\Output\WatchCats-Setup.exe
-        asset_name: WatchCats-nsis-v${{ needs.create-release.outputs.version }}.exe
-        asset_content_type: application/octet-stream
-
-  build-macos:
-    name: Build macOS
-    needs: create-release
-    runs-on: macos-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-        cache: 'pip'
-
-    - name: Install dependencies
-      run: |
-        python -m venv venv
-        source venv/bin/activate
-        pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pyinstaller==6.11.1
-
-    - name: Update version
-      run: |
-        VERSION="${{ needs.create-release.outputs.version }}"
-        sed -i '' "s/CFBundleVersion.*$/CFBundleVersion\": \"$VERSION\",/" baal.spec
-        sed -i '' "s/CFBundleShortVersionString.*$/CFBundleShortVersionString\": \"$VERSION\",/" baal.spec
-
-    - name: Build with PyInstaller
-      run: |
-        source venv/bin/activate
-        pyinstaller --clean --noconfirm baal.spec
-
-    - name: Create DMG
-      run: |
-        pip install dmgbuild
-        dmgbuild -s scripts/dmgbuild-settings.py -D app="dist/Watch Cats.app" "WatchCats" "dist/WatchCats-v${{ needs.create-release.outputs.version }}.dmg"
-
-    - name: Create ZIP
-      run: |
-        cd dist
-        zip -r "WatchCats-v${{ needs.create-release.outputs.version }}.app.zip" "Watch Cats.app"
-        cd ..
-
-    - name: Upload DMG
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: dist/WatchCats-v${{ needs.create-release.outputs.version }}.dmg
-        asset_name: WatchCats-v${{ needs.create-release.outputs.version }}.dmg
-        asset_content_type: application/octet-stream
-
-    - name: Upload APP ZIP
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: dist/WatchCats-v${{ needs.create-release.outputs.version }}.app.zip
-        asset_name: WatchCats-v${{ needs.create-release.outputs.version }}.app.zip
-        asset_content_type: application/zip
-
-  finalize-release:
-    name: Finalize Release
-    needs: [create-release, build-windows, build-macos]
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Publish release
-      uses: actions/github-script@v7
-      with:
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-        script: |
-          const { owner, repo } = context.repo;
-          const tag = 'v${{ needs.create-release.outputs.version }}';
+          ### 📝 安装说明
+          1. **推荐**：下载 `WatchCats-Setup.exe` 安装版
+             - 双击运行安装程序
+             - 按照向导完成安装
+             - 自动安装所需的 Visual C++ 运行库
           
-          // 获取release
-          const releases = await github.rest.repos.listReleases({
-            owner,
-            repo
-          });
+          2. **备选**：下载 `WatchCats-Windows.zip` 便携版
+             - 解压到任意目录
+             - 运行 `WatchCats.exe`
+             - 如遇到闪退，请先安装 Visual C++ Redistributables
           
-          const release = releases.data.find(r => r.tag_name === tag);
-          
-          if (release && release.draft) {
-            // 发布release
-            await github.rest.repos.updateRelease({
-              owner,
-              repo,
-              release_id: release.id,
-              draft: false
-            });
-            
-            console.log(`Release ${tag} published successfully!`);
-          }
+          ### ⚠️ 遇到问题？
+          - 如果程序闪退：运行安装版或手动安装 [Visual C++ Redistributables](https://aka.ms/vs/17/release/vc_redist.x64.exe)
+          - 更多帮助请访问：[Issues](https://github.com/${{ github.repository }}/issues)
