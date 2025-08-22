@@ -6,5 +6,5 @@ ActivityWatch 统计数据处理模块
 
 from .stats_processor import StatsProcessor
 
-__version__ = "0.1.0"
+__version__ = "0.1.3"
 __all__ = ["StatsProcessor"]

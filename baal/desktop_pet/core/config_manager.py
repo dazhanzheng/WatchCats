@@ -83,7 +83,7 @@ class ConfigManager:
                     # 最后一次尝试失败，尝试备用位置
                     if sys.platform == "win32":
                         # Windows: 尝试用户主目录
-                        fallback_dir = Path.home() / "BaalPet"
+                        fallback_dir = Path.home() / "WatchCats"
                         self.logger.warning(f"Trying fallback directory: {fallback_dir}")
                         try:
                             fallback_dir.mkdir(parents=True, exist_ok=True)
@@ -105,14 +105,14 @@ class ConfigManager:
             # 方法1: 使用 APPDATA 环境变量
             appdata = os.environ.get('APPDATA')
             if appdata and os.path.exists(appdata):
-                config_dir = Path(appdata) / "BaalPet"
+                config_dir = Path(appdata) / "WatchCats"
                 self.logger.info(f"Using APPDATA: {config_dir}")
             
             # 方法2: 使用 LOCALAPPDATA
             if not config_dir:
                 localappdata = os.environ.get('LOCALAPPDATA')
                 if localappdata and os.path.exists(localappdata):
-                    config_dir = Path(localappdata) / "BaalPet"
+                    config_dir = Path(localappdata) / "WatchCats"
                     self.logger.info(f"Using LOCALAPPDATA: {config_dir}")
             
             # 方法3: 通过 expanduser 和路径构建
@@ -124,10 +124,10 @@ class ConfigManager:
                     appdata_local = home / 'AppData' / 'Local'
                     
                     if appdata_roaming.exists():
-                        config_dir = appdata_roaming / "BaalPet"
+                        config_dir = appdata_roaming / "WatchCats"
                         self.logger.info(f"Using constructed Roaming path: {config_dir}")
                     elif appdata_local.exists():
-                        config_dir = appdata_local / "BaalPet"
+                        config_dir = appdata_local / "WatchCats"
                         self.logger.info(f"Using constructed Local path: {config_dir}")
                 except Exception as e:
                     self.logger.warning(f"Failed to construct AppData path: {e}")
@@ -138,7 +138,7 @@ class ConfigManager:
                     # Windows 上的文档目录通常更可靠
                     documents = Path.home() / 'Documents'
                     if documents.exists():
-                        config_dir = documents / "BaalPet"
+                        config_dir = documents / "WatchCats"
                         self.logger.info(f"Using Documents directory: {config_dir}")
                 except Exception as e:
                     self.logger.warning(f"Failed to use Documents: {e}")

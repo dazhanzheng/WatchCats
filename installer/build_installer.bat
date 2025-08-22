@@ -1,10 +1,10 @@
 @echo off
-REM Baal Pet Assistant Installer Build Script
-REM 构建 Baal 宠物助手安装包
+REM WatchCats Installer Build Script
+REM 构建 WatchCats 安装包
 
 echo ==========================================
-echo Baal 宠物助手安装包构建脚本
-echo Baal Pet Assistant Installer Build Script
+echo WatchCats 安装包构建脚本
+echo WatchCats Installer Build Script
 echo ==========================================
 echo.
 
@@ -80,10 +80,10 @@ REM 创建输出目录
 if not exist Output mkdir Output
 
 REM 清理旧的安装包
-if exist Output\BaalPetAssistantSetup.exe (
+if exist Output\WatchCats-Setup.exe (
     echo 删除旧的安装包...
     echo Removing old installer...
-    del /f /q Output\BaalPetAssistantSetup.exe
+    del /f /q Output\WatchCats-Setup.exe
 )
 
 echo.
@@ -104,10 +104,10 @@ if %errorlevel% equ 0 (
     echo ==========================================
     echo.
     echo 输出文件 Output file:
-    echo   Output\BaalPetAssistantSetup.exe
+    echo   Output\WatchCats-Setup.exe
     echo.
     echo 文件大小 File size:
-    for %%A in (Output\BaalPetAssistantSetup.exe) do echo   %%~zA bytes
+    for %%A in (Output\WatchCats-Setup.exe) do echo   %%~zA bytes
     echo.
     echo 现在可以分发此安装包了！
     echo The installer is ready for distribution!

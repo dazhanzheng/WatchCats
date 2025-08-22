@@ -14,7 +14,7 @@ from .parsers import (
 )
 from .binary_intent_classifier import BinaryIntentClassifier
 
-__version__ = "0.1.0"
+__version__ = "0.1.3"
 __all__ = [
     'LLMAssistant',
     'StatsCommandParser',

@@ -11,8 +11,8 @@ on:
 
 env:
   PYTHON_VERSION: '3.9'
-  APP_NAME: 'Baal宠物助手'
-  APP_NAME_EN: 'BaalPetAssistant'
+  APP_NAME: 'WatchCats'
+  APP_NAME_EN: 'WatchCats'
 
 jobs:
   build-windows:
@@ -186,7 +186,7 @@ jobs:
         }
         
         # Create package directory
-        $packageDir = "dist\BaalPetAssistant"
+        $packageDir = "dist\WatchCats"
         New-Item -ItemType Directory -Force -Path $packageDir | Out-Null
         
         # Copy main executable
@@ -243,7 +243,7 @@ jobs:
         }
         
         # Create ZIP (compress contents directly, not the folder)
-        $zipPath = "dist\BaalPetAssistant-Windows.zip"
+        $zipPath = "dist\WatchCats-Windows.zip"
         Compress-Archive -Path "$packageDir\*" -DestinationPath $zipPath -Force
         
         if (Test-Path $zipPath) {
@@ -263,12 +263,12 @@ jobs:
         pip install psutil
         
         # Copy test script to dist
-        Copy-Item "test_windows_app.py" -Destination "dist\BaalPetAssistant\test_windows_app.py"
+        Copy-Item "test_windows_app.py" -Destination "dist\WatchCats\test_windows_app.py"
         
         # Run the test suite
         $testExitCode = 0
         try {
-          cd "dist\BaalPetAssistant"
+          cd "dist\WatchCats"
           ..\\..\\venv\\Scripts\\python test_windows_app.py "WatchCats.exe"
           $testExitCode = $LASTEXITCODE
         } catch {
@@ -296,7 +296,7 @@ jobs:
       with:
         name: windows-package
         path: |
-          dist\BaalPetAssistant-Windows.zip
+          dist\WatchCats-Windows.zip
         retention-days: 30
 
     - name: Create Release (if tagged)
@@ -304,12 +304,12 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         files: |
-          dist\BaalPetAssistant-Windows.zip
+          dist\WatchCats-Windows.zip
         body: |
           ## 下载说明 / Download Instructions
           
           ### Windows用户：
-          - **ZIP包**: `BaalPetAssistant-Windows.zip` - 解压即用
+          - **ZIP包**: `WatchCats-Windows.zip` - 解压即用
           - 包含所有必要的资源文件和表情素材
           
           ### 系统要求：

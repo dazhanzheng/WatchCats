@@ -97,7 +97,7 @@ echo 构建完成！Build Complete!
 echo ==========================================
 echo.
 echo 安装包位置 Installer location:
-echo   installer\Output\BaalPetAssistantSetup.exe
+echo   installer\Output\WatchCats-Setup.exe
 echo.
 echo 安装包特性 Installer features:
 echo   ✓ 自动安装 Visual C++ 运行库

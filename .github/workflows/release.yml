@@ -64,13 +64,13 @@ jobs:
           ### 📦 下载说明
           
           #### Windows用户：
-          - **安装版** (`BaalPetAssistantSetup.exe`): 推荐，包含开始菜单和卸载程序
-          - **便携版** (`Baal宠物助手.exe`): 无需安装，直接运行
-          - **NSIS安装版** (`BaalPetAssistant-nsis-setup.exe`): 备选安装程序
+          - **安装版** (`WatchCats-Setup.exe`): 推荐，包含开始菜单和卸载程序
+          - **便携版** (`WatchCats.exe`): 无需安装，直接运行
+          - **NSIS安装版** (`WatchCats-nsis-setup.exe`): 备选安装程序
           
           #### macOS用户：
-          - **DMG安装包** (`BaalPetAssistant.dmg`): 拖拽安装
-          - **APP包** (`BaalPetAssistant.app.zip`): 解压后直接运行
+          - **DMG安装包** (`WatchCats.dmg`): 拖拽安装
+          - **APP包** (`WatchCats.app.zip`): 解压后直接运行
           
           ### 💻 系统要求
           - **Windows**: Windows 10 1903 或更高版本
@@ -179,9 +179,9 @@ jobs:
     - name: Create checksums
       run: |
         $files = @(
-          "dist\Baal宠物助手.exe",
-          "installer\Output\BaalPetAssistantSetup.exe",
-          "installer\Output\BaalPetAssistantSetup.exe"
+          "dist\WatchCats.exe",
+          "installer\Output\WatchCats-Setup.exe",
+          "installer\Output\WatchCats-Setup.exe"
         )
         foreach ($file in $files) {
           if (Test-Path $file) {
@@ -206,8 +206,8 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: installer\Output\BaalPetAssistantSetup.exe
-        asset_name: BaalPetAssistantSetup-v${{ needs.create-release.outputs.version }}.exe
+        asset_path: installer\Output\WatchCats-Setup.exe
+        asset_name: WatchCats-Setup-v${{ needs.create-release.outputs.version }}.exe
         asset_content_type: application/octet-stream
 
     - name: Upload NSIS installer
@@ -216,8 +216,8 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: installer\Output\BaalPetAssistantSetup.exe
-        asset_name: BaalPetAssistant-nsis-v${{ needs.create-release.outputs.version }}.exe
+        asset_path: installer\Output\WatchCats-Setup.exe
+        asset_name: WatchCats-nsis-v${{ needs.create-release.outputs.version }}.exe
         asset_content_type: application/octet-stream
 
   build-macos:
@@ -257,12 +257,12 @@ jobs:
     - name: Create DMG
       run: |
         pip install dmgbuild
-        dmgbuild -s scripts/dmgbuild-settings.py -D app="dist/Watch Cats.app" "Baal Pet Assistant" "dist/BaalPetAssistant-v${{ needs.create-release.outputs.version }}.dmg"
+        dmgbuild -s scripts/dmgbuild-settings.py -D app="dist/Watch Cats.app" "WatchCats" "dist/WatchCats-v${{ needs.create-release.outputs.version }}.dmg"
 
     - name: Create ZIP
       run: |
         cd dist
-        zip -r "BaalPetAssistant-v${{ needs.create-release.outputs.version }}.app.zip" "Watch Cats.app"
+        zip -r "WatchCats-v${{ needs.create-release.outputs.version }}.app.zip" "Watch Cats.app"
         cd ..
 
     - name: Upload DMG
@@ -271,8 +271,8 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: dist/BaalPetAssistant-v${{ needs.create-release.outputs.version }}.dmg
-        asset_name: BaalPetAssistant-v${{ needs.create-release.outputs.version }}.dmg
+        asset_path: dist/WatchCats-v${{ needs.create-release.outputs.version }}.dmg
+        asset_name: WatchCats-v${{ needs.create-release.outputs.version }}.dmg
         asset_content_type: application/octet-stream
 
     - name: Upload APP ZIP
@@ -281,8 +281,8 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: dist/BaalPetAssistant-v${{ needs.create-release.outputs.version }}.app.zip
-        asset_name: BaalPetAssistant-v${{ needs.create-release.outputs.version }}.app.zip
+        asset_path: dist/WatchCats-v${{ needs.create-release.outputs.version }}.app.zip
+        asset_name: WatchCats-v${{ needs.create-release.outputs.version }}.app.zip
         asset_content_type: application/zip
 
   finalize-release:

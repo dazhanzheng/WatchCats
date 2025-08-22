@@ -1,15 +1,15 @@
-; Inno Setup Script for Baal Pet Assistant
+; Inno Setup Script for WatchCats
 ; Creates a traditional Windows installer with runtime dependency checks
 ; 创建传统的Windows安装程序，自动安装运行时依赖
 
-#define MyAppName "Baal宠物助手"
-#define MyAppNameEN "BaalPetAssistant"
-#define MyAppVersion "1.0.0"
-#define MyAppPublisher "Baal Project"
-#define MyAppURL "https://github.com/baal-project"
+#define MyAppName "WatchCats"
+#define MyAppNameEN "WatchCats"
+#define MyAppVersion "0.1.3"
+#define MyAppPublisher "WatchCats Project"
+#define MyAppURL "https://github.com/dazhanzheng/WatchCats"
 #define MyAppExeName "WatchCats.exe"
-#define MyAppAssocExt ".baal"
-#define MyAppAssocName "BaalPetFile"
+#define MyAppAssocExt ".watchcats"
+#define MyAppAssocName "WatchCatsFile"
 
 [Setup]
 ; 应用信息
@@ -25,7 +25,7 @@ DefaultDirName={autopf}\{#MyAppNameEN}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=Output
-OutputBaseFilename={#MyAppNameEN}Setup
+OutputBaseFilename=WatchCats-Setup
 SetupIconFile=..\baal\resources\cat.ico
 Compression=lzma2/max
 SolidCompression=yes
