@@ -61,9 +61,7 @@ jobs:
         name: Release v${{ steps.get_version.outputs.VERSION }}
         draft: true
         prerelease: ${{ github.event.inputs.prerelease || contains(steps.get_version.outputs.VERSION, 'beta') || contains(steps.get_version.outputs.VERSION, 'alpha') }}
-        files: |
-          ./artifacts/WatchCats-Windows.zip
-          ./artifacts/WatchCats-Setup.exe
+        files: ./artifacts/WatchCats-Setup.exe
         body: |
           ## 🎉 WatchCats v${{ steps.get_version.outputs.VERSION }}
           
@@ -78,24 +76,23 @@ jobs:
           ### 📦 下载说明
           
           #### Windows用户：
-          - **安装版** (`WatchCats-Setup.exe`): 推荐，自动安装依赖
-          - **便携版** (`WatchCats-Windows.zip`): 解压即用
+          - **安装包** (`WatchCats-Setup.exe`): 自动安装所有依赖和运行库
           
           ### 💻 系统要求
           - **Windows**: Windows 10 1903 或更高版本
           - 需要网络连接（AI功能）
           
           ### 📝 安装说明
-          1. **推荐**：下载 `WatchCats-Setup.exe` 安装版
-             - 双击运行安装程序
-             - 按照向导完成安装
-             - 自动安装所需的 Visual C++ 运行库
-          
-          2. **备选**：下载 `WatchCats-Windows.zip` 便携版
-             - 解压到任意目录
-             - 运行 `WatchCats.exe`
-             - 如遇到闪退，请先安装 Visual C++ Redistributables
+          1. 下载 `WatchCats-Setup.exe` 安装包
+          2. 双击运行安装程序
+          3. 按照向导完成安装
+          4. 安装程序会自动：
+             - 安装 Visual C++ 运行库
+             - 配置 Qt 环境
+             - 设置 API Key
+             - 创建快捷方式
           
           ### ⚠️ 遇到问题？
-          - 如果程序闪退：运行安装版或手动安装 [Visual C++ Redistributables](https://aka.ms/vs/17/release/vc_redist.x64.exe)
+          - 确保系统版本为 Windows 10 1903 或更高
+          - 安装程序已包含所有必要的运行库
           - 更多帮助请访问：[Issues](https://github.com/${{ github.repository }}/issues)

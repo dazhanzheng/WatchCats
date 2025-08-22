@@ -174,84 +174,6 @@ jobs:
         echo "VERSION=$version" >> $env:GITHUB_OUTPUT
         echo "Version: $version"
 
-    - name: Create ZIP Package
-      run: |
-        Write-Host "Creating comprehensive ZIP package..."
-        
-        # Find the exe
-        $exePath = Get-ChildItem -Path "dist" -Filter "*.exe" | Select-Object -First 1
-        if (-not $exePath) {
-          Write-Host "[ERROR] No exe file found!"
-          exit 1
-        }
-        
-        # Create package directory
-        $packageDir = "dist\WatchCats"
-        New-Item -ItemType Directory -Force -Path $packageDir | Out-Null
-        
-        # Copy main executable
-        Copy-Item $exePath.FullName -Destination "$packageDir\$($exePath.Name)"
-        
-        # CRITICAL: Copy Qt plugins if they exist in dist
-        $qtSourcePaths = @(
-          "dist\PyQt6",
-          "dist\_internal\PyQt6",
-          "dist\Qt6",
-          "dist\plugins"
-        )
-        
-        foreach ($sourcePath in $qtSourcePaths) {
-          if (Test-Path $sourcePath) {
-            Write-Host "Copying Qt files from $sourcePath"
-            $destPath = "$packageDir\$(Split-Path -Leaf $sourcePath)"
-            Copy-Item -Path $sourcePath -Destination $destPath -Recurse -Force
-          }
-        }
-        
-        # Ensure critical DLLs are included
-        $criticalDlls = Get-ChildItem -Path "dist" -Filter "*.dll" -File
-        foreach ($dll in $criticalDlls) {
-          if ($dll.Name -match "Qt6|qwindows|platform") {
-            Copy-Item $dll.FullName -Destination "$packageDir\$($dll.Name)" -Force
-            Write-Host "  Copied critical DLL: $($dll.Name)"
-          }
-        }
-        
-        # Copy resources
-        if (Test-Path "baal\resources") {
-          Copy-Item -Path "baal\resources" -Destination "$packageDir\resources" -Recurse -Force
-        }
-        if (Test-Path "动作表情拆分") {
-          Copy-Item -Path "动作表情拆分" -Destination "$packageDir\动作表情拆分" -Recurse -Force
-        }
-        
-        # Create batch file with Qt environment setup
-        $batchLines = @(
-          "@echo off",
-          "echo Starting Baal Pet Assistant...",
-          "REM Set Qt plugin paths for safety",
-          'set QT_PLUGIN_PATH=%~dp0PyQt6\Qt6\plugins;%~dp0Qt6\plugins;%~dp0plugins',
-          'set QT_QPA_PLATFORM_PLUGIN_PATH=%~dp0PyQt6\Qt6\plugins\platforms;%~dp0Qt6\plugins\platforms;%~dp0plugins\platforms',
-          "set QT_OPENGL=angle",
-          'start "" "%~dp0WatchCats.exe"'
-        )
-        $batchLines -join "`r`n" | Out-File -FilePath "$packageDir\Start.bat" -Encoding ASCII
-        
-        # Copy emergency fix tool
-        if (Test-Path "windows_emergency_fix.bat") {
-          Copy-Item "windows_emergency_fix.bat" -Destination "$packageDir\Emergency_Fix.bat"
-        }
-        
-        # Create ZIP (compress contents directly, not the folder)
-        $zipPath = "dist\WatchCats-Windows.zip"
-        Compress-Archive -Path "$packageDir\*" -DestinationPath $zipPath -Force
-        
-        if (Test-Path $zipPath) {
-          $zipInfo = Get-Item $zipPath
-          Write-Host "[OK] ZIP package created: $($zipInfo.Name)"
-          Write-Host "   Size: $([math]::Round($zipInfo.Length / 1MB, 2)) MB"
-        }
-
     - name: Install Inno Setup
       run: |
         Write-Host "Installing Inno Setup..."
@@ -393,13 +315,13 @@ jobs:
         pip install psutil
         
         # Copy test script to dist
-        Copy-Item "test_windows_app.py" -Destination "dist\WatchCats\test_windows_app.py"
+        Copy-Item "test_windows_app.py" -Destination "dist\test_windows_app.py"
         
         # Run the test suite
         $testExitCode = 0
         try {
-          cd "dist\WatchCats"
-          ..\\..\\venv\\Scripts\\python test_windows_app.py "WatchCats.exe"
+          cd "dist"
+          ..\\venv\\Scripts\\python test_windows_app.py "WatchCats.exe"
           $testExitCode = $LASTEXITCODE
         } catch {
           Write-Host "[ERROR] Test execution failed: $_"
@@ -425,34 +347,30 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: windows-package
-        path: |
-          dist\WatchCats-Windows.zip
-          dist\WatchCats-Setup.exe
+        path: dist\WatchCats-Setup.exe
         retention-days: 3  # 仓库限制最多 3 天
 
     - name: Create Release (if tagged)
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v2
       with:
-        files: |
-          dist\WatchCats-Windows.zip
-          dist\WatchCats-Setup.exe
+        files: dist\WatchCats-Setup.exe
         body: |
           ## 下载说明 / Download Instructions
           
           ### Windows用户：
-          - **安装版**: `WatchCats-Setup.exe` - 推荐，自动安装依赖
-          - **便携版**: `WatchCats-Windows.zip` - 解压即用
+          - **安装包**: `WatchCats-Setup.exe` - 自动安装所有依赖
           - 包含所有必要的资源文件和表情素材
+          - 自动配置运行环境
           
           ### 系统要求：
           - Windows 10 1903 或更高版本
           - 需要网络连接（AI功能）
           
           ### 遇到问题？
-          1. 运行 Emergency_Fix.bat 修复常见问题
-          2. 使用 Start.bat 启动而非直接运行 exe
-          3. 安装 Visual C++ Redistributables
+          1. 确保 Windows 10 1903 或更高版本
+          2. 安装程序会自动安装 Visual C++ Redistributables
+          3. 如仍有问题，请提交 Issue
           
           ---
           自动生成于 GitHub Actions
