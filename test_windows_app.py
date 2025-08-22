@@ -38,11 +38,11 @@ class AppTester:
         self.log(f"Running test: {test_name}")
         
         if self.app_path.exists():
-            self.log(f"✓ Application file exists: {self.app_path}", "SUCCESS")
+            self.log(f"[OK] Application file exists: {self.app_path}", "SUCCESS")
             self.test_results.append((test_name, True))
             return True
         else:
-            self.log(f"✗ Application file not found: {self.app_path}", "ERROR")
+            self.log(f"[FAIL] Application file not found: {self.app_path}", "ERROR")
             self.test_results.append((test_name, False))
             return False
             
@@ -52,7 +52,7 @@ class AppTester:
         self.log(f"Running test: {test_name}")
         
         if not self.app_path.exists():
-            self.log("✗ Cannot check size - file doesn't exist", "ERROR")
+            self.log("[FAIL] Cannot check size - file doesn't exist", "ERROR")
             self.test_results.append((test_name, False))
             return False
             
@@ -61,11 +61,11 @@ class AppTester:
         
         # 检查文件大小是否在合理范围内 (1MB - 500MB)
         if 1 < size_mb < 500:
-            self.log(f"✓ File size is reasonable: {size_mb:.2f} MB", "SUCCESS")
+            self.log(f"[OK] File size is reasonable: {size_mb:.2f} MB", "SUCCESS")
             self.test_results.append((test_name, True))
             return True
         else:
-            self.log(f"✗ File size unusual: {size_mb:.2f} MB", "WARNING")
+            self.log(f"[WARN] File size unusual: {size_mb:.2f} MB", "WARNING")
             self.test_results.append((test_name, False))
             return False
             
@@ -99,13 +99,13 @@ class AppTester:
                 missing_optional.append(file)
                 
         if missing_required:
-            self.log(f"✗ Missing required files: {missing_required}", "ERROR")
+            self.log(f"[FAIL] Missing required files: {missing_required}", "ERROR")
             self.test_results.append((test_name, False))
             return False
         else:
             if missing_optional:
-                self.log(f"⚠ Missing optional files: {missing_optional}", "WARNING")
-            self.log("✓ All required dependencies found", "SUCCESS")
+                self.log(f"[WARN] Missing optional files: {missing_optional}", "WARNING")
+            self.log("[OK] All required dependencies found", "SUCCESS")
             self.test_results.append((test_name, True))
             return True
             
@@ -116,7 +116,7 @@ class AppTester:
         
         # 在 CI 环境中可能无法启动 GUI 应用
         if os.environ.get('CI'):
-            self.log("⚠ Skipping launch test in CI environment", "WARNING")
+            self.log("[SKIP] Skipping launch test in CI environment", "WARNING")
             self.test_results.append((test_name, None))  # None 表示跳过
             return None
             
@@ -140,7 +140,7 @@ class AppTester:
             
             if self.process.poll() is None:
                 # 进程仍在运行
-                self.log("✓ Application launched successfully", "SUCCESS")
+                self.log("[OK] Application launched successfully", "SUCCESS")
                 self.test_results.append((test_name, True))
                 
                 # 终止进程
@@ -151,7 +151,7 @@ class AppTester:
                 returncode = self.process.returncode
                 stdout, stderr = self.process.communicate(timeout=1)
                 
-                self.log(f"✗ Application exited with code: {returncode}", "ERROR")
+                self.log(f"[FAIL] Application exited with code: {returncode}", "ERROR")
                 if stdout:
                     self.log(f"STDOUT: {stdout.decode('utf-8', errors='ignore')[:500]}")
                 if stderr:
@@ -161,7 +161,7 @@ class AppTester:
                 return False
                 
         except Exception as e:
-            self.log(f"✗ Failed to launch application: {e}", "ERROR")
+            self.log(f"[FAIL] Failed to launch application: {e}", "ERROR")
             self.test_results.append((test_name, False))
             return False
             
@@ -194,7 +194,7 @@ class AppTester:
             return True
             
         except Exception as e:
-            self.log(f"✗ Failed to check directory structure: {e}", "ERROR")
+            self.log(f"[FAIL] Failed to check directory structure: {e}", "ERROR")
             self.test_results.append((test_name, False))
             return False
             
@@ -259,13 +259,13 @@ class AppTester:
         
         for test_name, result in self.test_results:
             if result is True:
-                self.log(f"✓ {test_name}: PASSED", "SUCCESS")
+                self.log(f"[PASS] {test_name}: PASSED", "SUCCESS")
                 passed += 1
             elif result is False:
-                self.log(f"✗ {test_name}: FAILED", "ERROR")
+                self.log(f"[FAIL] {test_name}: FAILED", "ERROR")
                 failed += 1
             else:
-                self.log(f"⚠ {test_name}: SKIPPED", "WARNING")
+                self.log(f"[SKIP] {test_name}: SKIPPED", "WARNING")
                 skipped += 1
                 
         self.log("-" * 30)
