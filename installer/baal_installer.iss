@@ -1,14 +1,15 @@
-; Inno Setup 安装脚本 - Baal宠物助手
-; 官网: https://jrsoftware.org/isinfo.php
+; Inno Setup Script for Baal Pet Assistant
+; Creates a traditional Windows installer with runtime dependency checks
+; 创建传统的Windows安装程序，自动安装运行时依赖
 
 #define MyAppName "Baal宠物助手"
 #define MyAppNameEN "BaalPetAssistant"
-#define MyAppVersion "0.1.0"
+#define MyAppVersion "1.0.0"
 #define MyAppPublisher "Baal Project"
-#define MyAppURL "https://github.com/yourusername/baal-standalone"
-#define MyAppExeName "Baal宠物助手.exe"
-#define MyAppAssocName "Baal Configuration"
+#define MyAppURL "https://github.com/baal-project"
+#define MyAppExeName "WatchCats.exe"
 #define MyAppAssocExt ".baal"
+#define MyAppAssocName "BaalPetFile"
 
 [Setup]
 ; 应用信息
@@ -36,6 +37,12 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 ; 界面设置
 ShowLanguageDialog=auto
 LanguageDetectionMethod=uilanguage
+WizardImageFile=installer_wizard.bmp
+WizardSmallImageFile=installer_small.bmp
+DisableWelcomePage=no
+DisableDirPage=no
+DisableReadyPage=no
+DisableFinishedPage=no
 
 ; 版本信息
 VersionInfoVersion={#MyAppVersion}
@@ -48,19 +55,24 @@ VersionInfoCopyright=Copyright (C) 2025 {#MyAppPublisher}
 MinVersion=10.0.17763
 
 [Languages]
+Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
-; Chinese language only if file exists
-; Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 
 [CustomMessages]
-; English messages (default)
-LaunchProgram=Launch {#MyAppName}
-CreateDesktopIcon=Create a &desktop shortcut
-CreateQuickLaunchIcon=Create a &Quick Launch shortcut
-; Chinese messages (if language pack available)
-; chinesesimplified.LaunchProgram=运行 {#MyAppName}
-; chinesesimplified.CreateDesktopIcon=创建桌面快捷方式(&D)
-; chinesesimplified.CreateQuickLaunchIcon=创建快速启动栏图标(&Q)
+; English messages
+english.LaunchProgram=Launch {#MyAppName}
+english.CreateDesktopIcon=Create a &desktop shortcut
+english.CreateQuickLaunchIcon=Create a &Quick Launch shortcut
+english.InstallVCRedist=Installing Visual C++ Runtime...
+english.CheckingDependencies=Checking system dependencies...
+english.ConfiguringApp=Configuring application...
+; Chinese messages
+chinesesimplified.LaunchProgram=运行 {#MyAppName}
+chinesesimplified.CreateDesktopIcon=创建桌面快捷方式(&D)
+chinesesimplified.CreateQuickLaunchIcon=创建快速启动栏图标(&Q)
+chinesesimplified.InstallVCRedist=正在安装 Visual C++ 运行库...
+chinesesimplified.CheckingDependencies=正在检查系统依赖项...
+chinesesimplified.ConfiguringApp=正在配置应用程序...
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
@@ -68,19 +80,29 @@ Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescrip
 Name: "startupicon"; Description: "Start automatically at Windows startup"; GroupDescription: "Additional options:"; Flags: unchecked
 
 [Files]
-; 主程序
+; 主程序和核心文件
 Source: "..\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\_internal\*"; DestDir: "{app}\_internal"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: DirExists(ExpandConstant('{#SourcePath}\..\dist\_internal'))
 
-; 资源文件（如果PyInstaller没有打包进exe）
+; Qt 平台插件（重要：解决闪退问题）
+Source: "..\dist\_internal\PyQt6\Qt6\plugins\platforms\*"; DestDir: "{app}\_internal\PyQt6\Qt6\plugins\platforms"; Flags: ignoreversion recursesubdirs; Check: DirExists(ExpandConstant('{#SourcePath}\..\dist\_internal\PyQt6\Qt6\plugins\platforms'))
+Source: "..\dist\_internal\PyQt6\Qt6\plugins\imageformats\*"; DestDir: "{app}\_internal\PyQt6\Qt6\plugins\imageformats"; Flags: ignoreversion recursesubdirs; Check: DirExists(ExpandConstant('{#SourcePath}\..\dist\_internal\PyQt6\Qt6\plugins\imageformats'))
+Source: "..\dist\_internal\PyQt6\Qt6\plugins\styles\*"; DestDir: "{app}\_internal\PyQt6\Qt6\plugins\styles"; Flags: ignoreversion recursesubdirs; Check: DirExists(ExpandConstant('{#SourcePath}\..\dist\_internal\PyQt6\Qt6\plugins\styles'))
+
+; 资源文件
 Source: "..\baal\resources\*"; DestDir: "{app}\baal\resources"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\动作表情拆分\*"; DestDir: "{app}\动作表情拆分"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\baal\references\*"; DestDir: "{app}\baal\references"; Flags: ignoreversion recursesubdirs createallsubdirs
 
-; 配置文件模板（可选）
+; Visual C++ Redistributable installers
+Source: "vcredist\vc_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall; Check: not VCRedist64Installed
+Source: "vcredist\vc_redist.x86.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall; Check: not VCRedist32Installed
+
+; 配置文件模板
 Source: "config_template.json"; DestDir: "{app}"; Flags: ignoreversion; Check: FileExists(ExpandConstant('{#SourcePath}\config_template.json'))
 
-; README文档
-Source: "..\BUILD_WINDOWS.md"; DestDir: "{app}"; DestName: "README.txt"; Flags: ignoreversion
+; 用户手册（不包含 README.txt）
+Source: "..\USER_MANUAL.md"; DestDir: "{app}"; DestName: "用户手册.txt"; Flags: ignoreversion; Check: FileExists(ExpandConstant('{#SourcePath}\..\USER_MANUAL.md'))
 
 [Dirs]
 ; 创建用户数据目录
@@ -125,31 +147,93 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram}"; Flags: now
 ; Type: filesandordirs; Name: "{userappdata}\{#MyAppNameEN}"
 
 [Code]
-// 检查.NET Framework或其他依赖
+// 检查 Visual C++ Redistributable 是否已安装
+function VCRedist64Installed(): Boolean;
+begin
+  Result := RegKeyExists(HKEY_LOCAL_MACHINE, 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64') or
+            RegKeyExists(HKEY_LOCAL_MACHINE, 'SOFTWARE\Classes\Installer\Dependencies\VC,redist.x64,amd64,14.40,bundle');
+end;
+
+function VCRedist32Installed(): Boolean;
+begin
+  Result := RegKeyExists(HKEY_LOCAL_MACHINE, 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x86') or
+            RegKeyExists(HKEY_LOCAL_MACHINE, 'SOFTWARE\Classes\Installer\Dependencies\VC,redist.x86,x86,14.40,bundle');
+end;
+
+// 检查目录是否存在
+function DirExists(const DirName: String): Boolean;
+begin
+  Result := DirectoryExists(DirName);
+end;
+
+// 检查文件是否存在
+function FileExists(const FileName: String): Boolean;
+begin
+  Result := FileExists(FileName);
+end;
+
+// 初始化设置
 function InitializeSetup(): Boolean;
 var
   ResultCode: Integer;
+  Message: String;
 begin
   Result := True;
   
-  // Check if already installed
+  // 检查是否已安装旧版本
   if RegKeyExists(HKEY_CURRENT_USER, 'Software\{#MyAppPublisher}\{#MyAppNameEN}') then
   begin
-    if MsgBox('Previous version detected. Continue with installation?', mbConfirmation, MB_YESNO) = IDNO then
+    if ActiveLanguage = 'chinesesimplified' then
+      Message := '检测到已安装的版本。是否继续安装？'
+    else
+      Message := 'Previous version detected. Continue with installation?';
+      
+    if MsgBox(Message, mbConfirmation, MB_YESNO) = IDNO then
     begin
       Result := False;
+      Exit;
     end;
   end;
   
-  // Check Visual C++ Redistributable if needed
-  if not RegKeyExists(HKEY_LOCAL_MACHINE, 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64') then
+  // 检查 Visual C++ Redistributable
+  if not VCRedist64Installed() then
   begin
-    if MsgBox('Visual C++ Redistributable 2015-2022 not detected.' + #13#10 + 
-              'The program may not run properly. Continue anyway?', mbConfirmation, MB_YESNO) = IDNO then
-    begin
-      Result := False;
-    end;
+    if ActiveLanguage = 'chinesesimplified' then
+      Message := 'Visual C++ 运行库未检测到。' + #13#10 + '安装程序将自动安装所需的运行库。'
+    else
+      Message := 'Visual C++ Redistributable not detected.' + #13#10 + 'The installer will install the required runtime.';
+      
+    MsgBox(Message, mbInformation, MB_OK);
   end;
+end;
+
+// 安装运行库
+procedure InstallVCRedist();
+var
+  ResultCode: Integer;
+  StatusText: String;
+begin
+  if ActiveLanguage = 'chinesesimplified' then
+    StatusText := '正在安装 Visual C++ 运行库...'
+  else
+    StatusText := 'Installing Visual C++ Runtime...';
+    
+  WizardForm.StatusLabel.Caption := StatusText;
+  WizardForm.ProgressGauge.Style := npbstMarquee;
+  
+  // 安装 64 位运行库
+  if not VCRedist64Installed() and FileExists(ExpandConstant('{tmp}\vc_redist.x64.exe')) then
+  begin
+    Exec(ExpandConstant('{tmp}\vc_redist.x64.exe'), '/quiet /norestart', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  end;
+  
+  // 安装 32 位运行库（某些依赖可能需要）
+  if not VCRedist32Installed() and FileExists(ExpandConstant('{tmp}\vc_redist.x86.exe')) then
+  begin
+    Exec(ExpandConstant('{tmp}\vc_redist.x86.exe'), '/quiet /norestart', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  end;
+  
+  WizardForm.ProgressGauge.Style := npbstNormal;
 end;
 
 // Uninstall confirmation
@@ -160,19 +244,66 @@ begin
                    mbConfirmation, MB_YESNO) = IDYES;
 end;
 
-// 安装完成后的操作
+// 安装步骤变化时的操作
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   ConfigPath: String;
+  QtConfPath: String;
+  QtConfContent: String;
+  StatusText: String;
 begin
-  if CurStep = ssPostInstall then
+  if CurStep = ssInstall then
   begin
+    // 在文件复制前安装运行库
+    InstallVCRedist();
+  end
+  else if CurStep = ssPostInstall then
+  begin
+    // 配置应用程序
+    if ActiveLanguage = 'chinesesimplified' then
+      StatusText := '正在配置应用程序...'
+    else
+      StatusText := 'Configuring application...';
+    WizardForm.StatusLabel.Caption := StatusText;
+    
+    // 创建 qt.conf 文件（解决 Qt 插件路径问题）
+    QtConfPath := ExpandConstant('{app}\qt.conf');
+    QtConfContent := '[Paths]' + #13#10 +
+                     'Prefix = _internal/PyQt6/Qt6' + #13#10 +
+                     'Plugins = _internal/PyQt6/Qt6/plugins' + #13#10 +
+                     'Libraries = _internal/PyQt6/Qt6/lib' + #13#10;
+    SaveStringToFile(QtConfPath, QtConfContent, False);
+    
     // 创建默认配置文件（如果不存在）
     ConfigPath := ExpandConstant('{userappdata}\{#MyAppNameEN}\config.json');
     if not FileExists(ConfigPath) then
     begin
-      // 这里可以创建默认配置
-      SaveStringToFile(ConfigPath, '{"version": "' + '{#MyAppVersion}' + '"}', False);
+      ForceDirectories(ExtractFilePath(ConfigPath));
+      SaveStringToFile(ConfigPath, '{' + #13#10 +
+                                  '  "version": "' + '{#MyAppVersion}' + '",' + #13#10 +
+                                  '  "first_run": true,' + #13#10 +
+                                  '  "language": "zh_CN"' + #13#10 +
+                                  '}', False);
     end;
+    
+    // 设置环境变量（Qt 插件路径）
+    SetEnvironmentVariable('QT_PLUGIN_PATH', ExpandConstant('{app}\_internal\PyQt6\Qt6\plugins'));
+    SetEnvironmentVariable('QT_QPA_PLATFORM_PLUGIN_PATH', ExpandConstant('{app}\_internal\PyQt6\Qt6\plugins\platforms'));
+  end;
+end;
+
+// 卸载前的操作
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  NeedsRestart := False;
+  Result := '';
+  
+  // 检查程序是否正在运行
+  if CheckForMutexes('{#MyAppNameEN}Mutex') then
+  begin
+    if ActiveLanguage = 'chinesesimplified' then
+      Result := '程序正在运行，请先关闭程序后再继续安装。'
+    else
+      Result := 'The application is currently running. Please close it before continuing.';
   end;
 end;
