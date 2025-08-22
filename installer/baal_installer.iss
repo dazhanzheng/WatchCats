@@ -26,7 +26,7 @@ DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=Output
 OutputBaseFilename=WatchCats-Setup
-SetupIconFile=..\baal\resources\watchcats_hq.ico
+SetupIconFile=icons\WatchCats.ico
 ; 用于检测应用程序是否运行
 AppMutex={#MyAppNameEN}Mutex
 Compression=lzma2/max
@@ -91,6 +91,11 @@ Name: "startupicon"; Description: "{cm:StartupIcon}"; GroupDescription: "{cm:Add
 ; 主程序
 Source: "..\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 
+; 高质量图标文件
+Source: "icons\WatchCats.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "icons\WatchCats_256.png"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "icons\WatchCats_512.png"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+
 ; PyInstaller 生成的内部文件（可能在 _internal 或直接在 dist 目录）
 ; 使用 skipifsourcedoesntexist 标志使其成为可选项
 Source: "..\dist\_internal\*"; DestDir: "{app}\_internal"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
@@ -127,17 +132,17 @@ Name: "{localappdata}\{#MyAppNameEN}\logs"
 Name: "{localappdata}\{#MyAppNameEN}\data"
 
 [Icons]
-; Start menu shortcuts
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+; Start menu shortcuts - 使用高质量图标
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\WatchCats.ico"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
-Name: "{group}\User Manual"; Filename: "{app}\用户手册.txt"
-Name: "{group}\Configuration Folder"; Filename: "{userappdata}\{#MyAppNameEN}"
+Name: "{group}\User Manual"; Filename: "{app}\用户手册.txt"; IconFilename: "{app}\WatchCats.ico"
+Name: "{group}\Configuration Folder"; Filename: "{userappdata}\{#MyAppNameEN}"; IconFilename: "{app}\WatchCats.ico"
 
-; Desktop shortcut
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+; Desktop shortcut - 使用高质量图标
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon; IconFilename: "{app}\WatchCats.ico"; IconIndex: 0
 
-; Quick Launch shortcut
-Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: quicklaunchicon
+; Quick Launch shortcut - 使用高质量图标
+Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: quicklaunchicon; IconFilename: "{app}\WatchCats.ico"
 
 ; Startup shortcut (removed - using registry instead)
 
