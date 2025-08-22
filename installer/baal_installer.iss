@@ -73,14 +73,22 @@ Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescrip
 Name: "startupicon"; Description: "Start automatically at Windows startup"; GroupDescription: "Additional options:"; Flags: unchecked
 
 [Files]
-; 主程序和核心文件
+; 主程序
 Source: "..\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\dist\_internal\*"; DestDir: "{app}\_internal"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: DirExists(ExpandConstant('{#SourcePath}\..\dist\_internal'))
 
-; Qt 平台插件（重要：解决闪退问题）
-Source: "..\dist\_internal\PyQt6\Qt6\plugins\platforms\*"; DestDir: "{app}\_internal\PyQt6\Qt6\plugins\platforms"; Flags: ignoreversion recursesubdirs; Check: DirExists(ExpandConstant('{#SourcePath}\..\dist\_internal\PyQt6\Qt6\plugins\platforms'))
-Source: "..\dist\_internal\PyQt6\Qt6\plugins\imageformats\*"; DestDir: "{app}\_internal\PyQt6\Qt6\plugins\imageformats"; Flags: ignoreversion recursesubdirs; Check: DirExists(ExpandConstant('{#SourcePath}\..\dist\_internal\PyQt6\Qt6\plugins\imageformats'))
-Source: "..\dist\_internal\PyQt6\Qt6\plugins\styles\*"; DestDir: "{app}\_internal\PyQt6\Qt6\plugins\styles"; Flags: ignoreversion recursesubdirs; Check: DirExists(ExpandConstant('{#SourcePath}\..\dist\_internal\PyQt6\Qt6\plugins\styles'))
+; PyInstaller 生成的内部文件（可能在 _internal 或直接在 dist 目录）
+; 使用 skipifsourcedoesntexist 标志使其成为可选项
+Source: "..\dist\_internal\*"; DestDir: "{app}\_internal"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+Source: "..\dist\*.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "..\dist\*.pyd"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+
+; Qt 平台插件（从多个可能的位置尝试）
+Source: "..\dist\_internal\PyQt6\Qt6\plugins\platforms\*"; DestDir: "{app}\_internal\PyQt6\Qt6\plugins\platforms"; Flags: ignoreversion recursesubdirs skipifsourcedoesntexist
+Source: "..\dist\PyQt6\Qt6\plugins\platforms\*"; DestDir: "{app}\PyQt6\Qt6\plugins\platforms"; Flags: ignoreversion recursesubdirs skipifsourcedoesntexist
+Source: "..\dist\_internal\PyQt6\Qt6\plugins\imageformats\*"; DestDir: "{app}\_internal\PyQt6\Qt6\plugins\imageformats"; Flags: ignoreversion recursesubdirs skipifsourcedoesntexist
+Source: "..\dist\PyQt6\Qt6\plugins\imageformats\*"; DestDir: "{app}\PyQt6\Qt6\plugins\imageformats"; Flags: ignoreversion recursesubdirs skipifsourcedoesntexist
+Source: "..\dist\_internal\PyQt6\Qt6\plugins\styles\*"; DestDir: "{app}\_internal\PyQt6\Qt6\plugins\styles"; Flags: ignoreversion recursesubdirs skipifsourcedoesntexist
+Source: "..\dist\PyQt6\Qt6\plugins\styles\*"; DestDir: "{app}\PyQt6\Qt6\plugins\styles"; Flags: ignoreversion recursesubdirs skipifsourcedoesntexist
 
 ; 资源文件
 Source: "..\baal\resources\*"; DestDir: "{app}\baal\resources"; Flags: ignoreversion recursesubdirs createallsubdirs
