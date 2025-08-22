@@ -2,7 +2,8 @@
 ; Creates a traditional Windows installer with runtime dependency checks
 ; 创建传统的Windows安装程序，自动安装运行时依赖
 
-; 移除 include，直接在主文件中定义函数
+; 包含改进的数据迁移功能
+#include "data_migration.pas"
 
 #define MyAppName "WatchCats"
 #define MyAppNameEN "WatchCats"
@@ -316,120 +317,11 @@ begin
   end;
 end;
 
-// 迁移旧版本数据
+// 旧的迁移函数 - 已被改进版本替代
 procedure MigrateOldData();
-var
-  OldConfigPath: String;
-  NewConfigPath: String;
-  OldMemoryPath: String;
-  NewMemoryPath: String;
-  ResultCode: Integer;
-  StatusText: String;
-  FilesCopied: Integer;
 begin
-  // 定义旧版本路径 (BaalPet in Roaming)
-  OldConfigPath := ExpandConstant('{userappdata}\BaalPet');
-  // 定义新版本路径 (WatchCats in Local)
-  NewConfigPath := ExpandConstant('{localappdata}\WatchCats');
-  
-  // 检查旧版本目录是否存在
-  if DirExists(OldConfigPath) then
-  begin
-    StatusText := '检测到旧版本数据，正在迁移...';
-    if GetUILanguage <> $0804 then
-      StatusText := 'Old version data detected, migrating...';
-    
-    WizardForm.StatusLabel.Caption := StatusText;
-    WizardForm.ProgressGauge.Style := npbstMarquee;
-    
-    // 确保新目录存在
-    ForceDirectories(NewConfigPath);
-    
-    FilesCopied := 0;
-    
-    // 迁移 config.json
-    if FileExists(OldConfigPath + '\config.json') then
-    begin
-      if not FileExists(NewConfigPath + '\config.json') then
-      begin
-        if FileCopy(OldConfigPath + '\config.json', NewConfigPath + '\config.json', False) then
-        begin
-          FilesCopied := FilesCopied + 1;
-        end;
-      end;
-    end;
-    
-    // 迁移 chat_history.json (聊天记录)
-    if FileExists(OldConfigPath + '\chat_history.json') then
-    begin
-      if not FileExists(NewConfigPath + '\chat_history.json') then
-      begin
-        FileCopy(OldConfigPath + '\chat_history.json', NewConfigPath + '\chat_history.json', False);
-        FilesCopied := FilesCopied + 1;
-      end;
-    end;
-    
-    // 迁移 memory 文件夹（如果存在）
-    OldMemoryPath := OldConfigPath + '\memory';
-    NewMemoryPath := NewConfigPath + '\memory';
-    if DirExists(OldMemoryPath) then
-    begin
-      if not DirExists(NewMemoryPath) then
-      begin
-        ForceDirectories(NewMemoryPath);
-        // 复制 memory 文件夹中的所有文件
-        Exec('xcopy', '"' + OldMemoryPath + '\*" "' + NewMemoryPath + '\" /E /Y /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-        FilesCopied := FilesCopied + 1;
-      end;
-    end;
-    
-    // 迁移 schedules.json (日程文件)
-    if FileExists(OldConfigPath + '\schedules.json') then
-    begin
-      if not FileExists(NewConfigPath + '\schedules.json') then
-      begin
-        FileCopy(OldConfigPath + '\schedules.json', NewConfigPath + '\schedules.json', False);
-        FilesCopied := FilesCopied + 1;
-      end;
-    end;
-    
-    // 迁移 goals.json (目标文件)
-    if FileExists(OldConfigPath + '\goals.json') then
-    begin
-      if not FileExists(NewConfigPath + '\goals.json') then
-      begin
-        FileCopy(OldConfigPath + '\goals.json', NewConfigPath + '\goals.json', False);
-        FilesCopied := FilesCopied + 1;
-      end;
-    end;
-    
-    WizardForm.ProgressGauge.Style := npbstNormal;
-    
-    // 如果成功迁移了文件，只提示用户
-    if FilesCopied > 0 then
-    begin
-      if GetUILanguage = $0804 then
-      begin
-        MsgBox('已成功迁移 ' + IntToStr(FilesCopied) + ' 个文件从旧版本。' + Chr(13) + Chr(10) + 
-               Chr(13) + Chr(10) +
-               '旧版本数据保留在：' + Chr(13) + Chr(10) + 
-               OldConfigPath + Chr(13) + Chr(10) +
-               Chr(13) + Chr(10) +
-               '确认新版本正常运行后，您可以手动删除该文件夹。', 
-               mbInformation, MB_OK);
-      end
-      else
-      begin
-        MsgBox('Successfully migrated ' + IntToStr(FilesCopied) + ' files from old version.' + Chr(13) + Chr(10) + 
-               Chr(13) + Chr(10) +
-               'Old data preserved at:' + Chr(13) + Chr(10) + 
-               OldConfigPath + Chr(13) + Chr(10) +
-               Chr(13) + Chr(10) +
-               'You can manually delete this folder after confirming the new version works.', 
-               mbInformation, MB_OK);
-      end;
-    end;
-  end;
+  // 调用改进的迁移函数（来自 data_migration.pas）
+  MigrateOldDataSafe();
 end;
 
 // 卸载前的操作
