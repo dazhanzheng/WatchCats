@@ -350,8 +350,10 @@ begin
     begin
       if not FileExists(NewConfigPath + '\config.json') then
       begin
-        FileCopy(OldConfigPath + '\config.json', NewConfigPath + '\config.json', False);
-        FilesCopied := FilesCopied + 1;
+        if FileCopy(OldConfigPath + '\config.json', NewConfigPath + '\config.json', False) then
+        begin
+          FilesCopied := FilesCopied + 1;
+        end;
       end;
     end;
     
@@ -428,14 +430,17 @@ begin
   end;
 end;
 
+// 包含改进的迁移函数
+#include "migrate_data.iss"
+
 // 卸载前的操作
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
   NeedsRestart := False;
   Result := '';
   
-  // 迁移旧版本数据
-  MigrateOldData();
+  // 使用改进的迁移函数
+  MigrateOldDataImproved();
   
   // AppMutex 在 [Setup] 中已经配置，Inno Setup 会自动检查
   // 如果需要手动检查，可以使用 CheckForMutexes 函数

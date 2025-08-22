@@ -92,8 +92,20 @@ class DataMigration:
                 
                 if old_file.exists() and not new_file.exists():
                     try:
-                        shutil.copy2(old_file, new_file)
+                        # 先读取文件内容，确保可以访问
+                        with open(old_file, 'rb') as f:
+                            content = f.read()
+                        
+                        # 写入到新位置
+                        with open(new_file, 'wb') as f:
+                            f.write(content)
+                        
+                        # 复制文件权限和时间戳
+                        shutil.copystat(old_file, new_file)
+                        
                         result['files_migrated'].append(file_name)
+                    except PermissionError as e:
+                        result['errors'].append(f"Permission denied for {file_name}: {str(e)}")
                     except Exception as e:
                         result['errors'].append(f"Failed to migrate {file_name}: {str(e)}")
             
@@ -104,8 +116,25 @@ class DataMigration:
             if old_memory.exists() and old_memory.is_dir():
                 if not new_memory.exists():
                     try:
-                        shutil.copytree(old_memory, new_memory)
-                        result['files_migrated'].append('memory folder')
+                        # 创建目标目录
+                        new_memory.mkdir(parents=True, exist_ok=True)
+                        
+                        # 逐个复制文件，更容易处理权限问题
+                        copied_count = 0
+                        for item in old_memory.iterdir():
+                            try:
+                                if item.is_file():
+                                    dest = new_memory / item.name
+                                    with open(item, 'rb') as f:
+                                        content = f.read()
+                                    with open(dest, 'wb') as f:
+                                        f.write(content)
+                                    copied_count += 1
+                            except Exception as e:
+                                result['errors'].append(f"Failed to copy {item.name}: {str(e)}")
+                        
+                        if copied_count > 0:
+                            result['files_migrated'].append(f'memory folder ({copied_count} files)')
                     except Exception as e:
                         result['errors'].append(f"Failed to migrate memory folder: {str(e)}")
             
@@ -140,20 +169,29 @@ class DataMigration:
         return result
     
     def cleanup_old_data(self, confirm: bool = True) -> bool:
-        """清理旧数据目录"""
+        """清理旧数据目录
+        
+        注意：不建议自动删除，应该让用户确认新版本正常运行后手动删除
+        """
         if not self.old_dir.exists():
             return True
             
         if confirm:
             # 在实际应用中，这里应该通过UI询问用户
-            print(f"Delete old data directory: {self.old_dir}?")
+            print(f"Old data directory: {self.old_dir}")
+            print("It is recommended to keep the old data until you confirm the new version works properly.")
+            print("You can manually delete it later.")
             return False
             
         try:
-            shutil.rmtree(self.old_dir)
-            return True
+            # 创建一个标记文件，表示可以删除
+            marker_file = self.old_dir / '.can_be_deleted'
+            marker_file.write_text(f"This directory can be safely deleted.\nMigrated to: {self.new_dir}\nDate: {Path.cwd()}")
+            print(f"Marked old directory for deletion: {self.old_dir}")
+            # 不实际删除，让用户手动删除
+            return False
         except Exception as e:
-            print(f"Failed to delete old directory: {e}")
+            print(f"Failed to mark old directory: {e}")
             return False
 
 
