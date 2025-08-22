@@ -22,10 +22,10 @@ def create_test_old_data(old_dir: Path):
     """创建测试用的旧版本数据"""
     old_dir.mkdir(parents=True, exist_ok=True)
     
-    # 创建旧版本的配置文件
+    # 创建旧版本的配置文件（使用旧的model）
     config_data = {
         "api_key": "test-key-123",
-        "model": "gpt-3.5-turbo",
+        "model": "gpt-3.5-turbo",  # 旧的model，应该被更新
         "always_on_top": True
     }
     with open(old_dir / "config.json", 'w', encoding='utf-8') as f:
@@ -139,6 +139,15 @@ def test_migration():
                     config = json.load(f)
                 print(f"  ✓ config.json 已迁移")
                 print(f"    - API Key: {config.get('api_key', 'N/A')}")
+                print(f"    - Model: {config.get('model', 'N/A')}")
+                
+                # 验证model是否被更新
+                if config.get('model') == 'doubao-seed-1-6-flash-250715':
+                    print(f"    ✓ Model已更新为新版本")
+                    if '_old_model' in config:
+                        print(f"    - 旧Model: {config.get('_old_model')}")
+                else:
+                    print(f"    ✗ Model未更新: {config.get('model')}")
             else:
                 print(f"  ✗ config.json 未迁移")
             
@@ -201,8 +210,34 @@ def test_migration():
             else:
                 print(f"  ✗ 错误: 不应该重复迁移")
             
+            # 测试配置文件已存在时的model更新
+            print("\n测试配置文件已存在时的model更新...")
+            
+            # 修改config.json的model为旧值
+            with open(config_file, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+            config['model'] = 'gpt-4'  # 设置为另一个旧值
+            with open(config_file, 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=2)
+            
+            # 删除迁移标记以允许再次迁移
+            migrator.migration_flag_file.unlink()
+            
+            # 再次执行迁移（此时config.json已存在）
+            result2 = migrator.migrate()
+            
+            # 检查model是否被更新
+            with open(config_file, 'r', encoding='utf-8') as f:
+                updated_config = json.load(f)
+            
+            if updated_config.get('model') == 'doubao-seed-1-6-flash-250715':
+                print(f"  ✓ 已存在配置的model更新成功")
+                print(f"    - 旧Model: {updated_config.get('_old_model', 'N/A')}")
+            else:
+                print(f"  ✗ 已存在配置的model更新失败")
+            
             # 测试合并场景
-            print("\n测试合并场景...")
+            print("\n测试supervision.json合并场景...")
             # 在新目录创建一个空的 supervision.json
             new_supervision = new_dir / "supervision.json"
             new_supervision.unlink()  # 删除现有文件

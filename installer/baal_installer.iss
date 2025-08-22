@@ -426,6 +426,58 @@ begin
   end;
 end;
 
+// 更新config.json中的model字段
+procedure UpdateConfigModel(ConfigPath: String);
+var
+  ConfigContent: AnsiString;
+  UpdatedContent: String;
+  SearchPos: Integer;
+begin
+  try
+    // 读取文件内容
+    if LoadStringFromFile(ConfigPath, ConfigContent) then
+    begin
+      UpdatedContent := ConfigContent;
+      
+      // 查找 "model" 字段
+      SearchPos := Pos('"model"', UpdatedContent);
+      if SearchPos > 0 then
+      begin
+        // 找到model字段后的冒号
+        SearchPos := Pos(':', UpdatedContent, SearchPos);
+        if SearchPos > 0 then
+        begin
+          // 找到值的开始引号
+          SearchPos := Pos('"', UpdatedContent, SearchPos);
+          if SearchPos > 0 then
+          begin
+            // 删除旧值直到下一个引号
+            Delete(UpdatedContent, SearchPos + 1, Pos('"', UpdatedContent, SearchPos + 1) - SearchPos - 1);
+            // 插入新值
+            Insert('doubao-seed-1-6-flash-250715', UpdatedContent, SearchPos + 1);
+            
+            // 保存更新后的内容
+            if SaveStringToFile(ConfigPath, AnsiString(UpdatedContent), False) then
+            begin
+              Log('UpdateConfigModel: Successfully updated model to doubao-seed-1-6-flash-250715');
+            end
+            else
+            begin
+              Log('UpdateConfigModel: Failed to save updated config');
+            end;
+          end;
+        end;
+      end
+      else
+      begin
+        Log('UpdateConfigModel: model field not found in config');
+      end;
+    end;
+  except
+    Log('UpdateConfigModel: Error updating config file');
+  end;
+end;
+
 // 改进的数据迁移函数
 procedure MigrateOldDataSafe();
 var
@@ -492,6 +544,8 @@ begin
       begin
         FilesCopied := FilesCopied + 1;
         Log('Migration: Successfully copied config.json');
+        // 更新model字段
+        UpdateConfigModel(NewConfigPath + '\config.json');
       end
       else
       begin
@@ -502,6 +556,8 @@ begin
     else
     begin
       Log('Migration: config.json already exists in new location');
+      // 也更新已存在文件的model字段
+      UpdateConfigModel(NewConfigPath + '\config.json');
     end;
   end;
   

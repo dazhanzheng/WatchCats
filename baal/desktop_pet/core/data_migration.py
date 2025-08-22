@@ -88,6 +88,27 @@ class DataMigration:
                 ('supervision.json', 'supervision.json'),  # 新版监督文件（如果已经是新格式）
             ]
             
+            # 处理 config.json：如果新文件已存在，更新model字段
+            config_file = self.new_dir / 'config.json'
+            if config_file.exists():
+                try:
+                    with open(config_file, 'r', encoding='utf-8') as f:
+                        config_data = json.load(f)
+                    
+                    # 如果是旧model，更新为新的
+                    if config_data.get('model') and config_data.get('model') != 'doubao-seed-1-6-flash-250715':
+                        old_model = config_data['model']
+                        config_data['model'] = 'doubao-seed-1-6-flash-250715'
+                        config_data['_old_model'] = old_model
+                        config_data['_migration_note'] = 'Model updated during migration'
+                        
+                        with open(config_file, 'w', encoding='utf-8') as f:
+                            json.dump(config_data, f, ensure_ascii=False, indent=2)
+                        
+                        result['files_migrated'].append('config.json (model updated)')
+                except Exception as e:
+                    result['errors'].append(f"Failed to update model in config.json: {str(e)}")
+            
             # 处理 supervision.json 的特殊情况：如果新文件已存在，尝试合并
             supervision_file = self.new_dir / 'supervision.json'
             if supervision_file.exists():
@@ -126,8 +147,22 @@ class DataMigration:
                 
                 if old_file.exists() and not new_file.exists():
                     try:
+                        # 特殊处理配置文件，更新model字段
+                        if old_name == 'config.json' and new_name == 'config.json':
+                            with open(old_file, 'r', encoding='utf-8') as f:
+                                config_data = json.load(f)
+                            
+                            # 更新model字段为新的默认值
+                            if 'model' in config_data:
+                                old_model = config_data['model']
+                                config_data['model'] = 'doubao-seed-1-6-flash-250715'
+                                config_data['_old_model'] = old_model  # 保存旧值作为参考
+                                config_data['_migration_note'] = 'Model updated during migration'
+                            
+                            with open(new_file, 'w', encoding='utf-8') as f:
+                                json.dump(config_data, f, ensure_ascii=False, indent=2)
                         # 特殊处理监督目标文件的格式转换
-                        if old_name == 'goals.json' and new_name == 'supervision.json':
+                        elif old_name == 'goals.json' and new_name == 'supervision.json':
                             # 旧版 goals.json 转换为新版 supervision.json 格式
                             with open(old_file, 'r', encoding='utf-8') as f:
                                 old_data = json.load(f)
