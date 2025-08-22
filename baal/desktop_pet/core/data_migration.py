@@ -83,9 +83,41 @@ class DataMigration:
                 ('chat_history.json', 'conversation_history.json'),    # 聊天记录（重命名）
                 ('conversation_history.json', 'conversation_history.json'),  # 新格式的聊天记录
                 ('schedules.json', 'schedules.json'),       # 日程
-                ('goals.json', 'goals.json'),          # 目标
-                ('supervision_config.json', 'supervision_config.json'),  # 监督模式配置
+                ('goals.json', 'supervision.json'),          # 旧版目标文件 -> 新版监督文件
+                ('supervision_config.json', 'supervision.json'),  # 旧版监督配置 -> 新版监督文件
+                ('supervision.json', 'supervision.json'),  # 新版监督文件（如果已经是新格式）
             ]
+            
+            # 处理 supervision.json 的特殊情况：如果新文件已存在，尝试合并
+            supervision_file = self.new_dir / 'supervision.json'
+            if supervision_file.exists():
+                # 尝试合并旧版本的监督目标
+                supervision_merged = False
+                for old_name in ['goals.json', 'supervision_config.json', 'supervision.json']:
+                    old_file = self.old_dir / old_name
+                    if old_file.exists() and not supervision_merged:
+                        try:
+                            with open(old_file, 'r', encoding='utf-8') as f:
+                                old_data = json.load(f)
+                            with open(supervision_file, 'r', encoding='utf-8') as f:
+                                existing_data = json.load(f)
+                            
+                            # 如果新文件没有目标，但旧文件有，则合并
+                            if not existing_data.get('long_term_goal') and (
+                                old_data.get('goal') or old_data.get('long_term_goal')
+                            ):
+                                existing_data['long_term_goal'] = old_data.get('goal', old_data.get('long_term_goal', ''))
+                                existing_data['short_term_goals'] = old_data.get('tasks', old_data.get('short_term_goals', []))
+                                existing_data['merged_from'] = old_name
+                                existing_data['merged_at'] = datetime.now().isoformat()
+                                
+                                with open(supervision_file, 'w', encoding='utf-8') as f:
+                                    json.dump(existing_data, f, ensure_ascii=False, indent=2)
+                                
+                                result['files_migrated'].append(f"{old_name} -> supervision.json (merged)")
+                                supervision_merged = True
+                        except Exception as e:
+                            result['errors'].append(f"Failed to merge {old_name}: {str(e)}")
             
             # 迁移单个文件
             for old_name, new_name in files_to_migrate:
@@ -94,13 +126,42 @@ class DataMigration:
                 
                 if old_file.exists() and not new_file.exists():
                     try:
-                        # 先读取文件内容，确保可以访问
-                        with open(old_file, 'rb') as f:
-                            content = f.read()
-                        
-                        # 写入到新位置
-                        with open(new_file, 'wb') as f:
-                            f.write(content)
+                        # 特殊处理监督目标文件的格式转换
+                        if old_name == 'goals.json' and new_name == 'supervision.json':
+                            # 旧版 goals.json 转换为新版 supervision.json 格式
+                            with open(old_file, 'r', encoding='utf-8') as f:
+                                old_data = json.load(f)
+                            
+                            # 转换格式
+                            new_data = {
+                                'long_term_goal': old_data.get('goal', old_data.get('long_term_goal', '')),
+                                'short_term_goals': old_data.get('tasks', old_data.get('short_term_goals', [])),
+                                'updated_at': old_data.get('updated_at', datetime.now().isoformat())
+                            }
+                            
+                            with open(new_file, 'w', encoding='utf-8') as f:
+                                json.dump(new_data, f, ensure_ascii=False, indent=2)
+                        elif old_name == 'supervision_config.json' and new_name == 'supervision.json':
+                            # 旧版 supervision_config.json 转换为新版格式
+                            with open(old_file, 'r', encoding='utf-8') as f:
+                                old_data = json.load(f)
+                            
+                            # 保持格式一致
+                            new_data = {
+                                'long_term_goal': old_data.get('long_term_goal', ''),
+                                'short_term_goals': old_data.get('short_term_goals', []),
+                                'updated_at': old_data.get('updated_at', datetime.now().isoformat())
+                            }
+                            
+                            with open(new_file, 'w', encoding='utf-8') as f:
+                                json.dump(new_data, f, ensure_ascii=False, indent=2)
+                        else:
+                            # 普通文件直接复制
+                            with open(old_file, 'rb') as f:
+                                content = f.read()
+                            
+                            with open(new_file, 'wb') as f:
+                                f.write(content)
                         
                         # 复制文件权限和时间戳
                         shutil.copystat(old_file, new_file)

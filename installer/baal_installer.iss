@@ -565,18 +565,64 @@ begin
     end;
   end;
   
-  // 迁移 goals.json
+  // 迁移 goals.json 到 supervision.json (新版本的监督文件)
   if FileExists(OldConfigPath + '\goals.json') then
   begin
-    if not FileExists(NewConfigPath + '\goals.json') then
+    Log('Migration: Found goals.json');
+    if not FileExists(NewConfigPath + '\supervision.json') then
     begin
-      if SafeCopyFile(OldConfigPath + '\goals.json', NewConfigPath + '\goals.json') then
+      // 注意：文件名改变了，从 goals.json 到 supervision.json
+      if SafeCopyFile(OldConfigPath + '\goals.json', NewConfigPath + '\supervision.json') then
       begin
         FilesCopied := FilesCopied + 1;
+        Log('Migration: Successfully copied goals.json as supervision.json');
       end
       else
       begin
         FailedFiles := FailedFiles + 'goals.json, ';
+        Log('Migration: Failed to copy goals.json');
+      end;
+    end
+    else
+    begin
+      Log('Migration: supervision.json already exists in new location');
+    end;
+  end;
+  
+  // 也检查 supervision_config.json
+  if FileExists(OldConfigPath + '\supervision_config.json') then
+  begin
+    Log('Migration: Found supervision_config.json');
+    if not FileExists(NewConfigPath + '\supervision.json') then
+    begin
+      if SafeCopyFile(OldConfigPath + '\supervision_config.json', NewConfigPath + '\supervision.json') then
+      begin
+        FilesCopied := FilesCopied + 1;
+        Log('Migration: Successfully copied supervision_config.json as supervision.json');
+      end
+      else
+      begin
+        FailedFiles := FailedFiles + 'supervision_config.json, ';
+        Log('Migration: Failed to copy supervision_config.json');
+      end;
+    end;
+  end;
+  
+  // 直接检查 supervision.json (如果旧版本已经使用这个名称)
+  if FileExists(OldConfigPath + '\supervision.json') then
+  begin
+    Log('Migration: Found supervision.json');
+    if not FileExists(NewConfigPath + '\supervision.json') then
+    begin
+      if SafeCopyFile(OldConfigPath + '\supervision.json', NewConfigPath + '\supervision.json') then
+      begin
+        FilesCopied := FilesCopied + 1;
+        Log('Migration: Successfully copied supervision.json');
+      end
+      else
+      begin
+        FailedFiles := FailedFiles + 'supervision.json, ';
+        Log('Migration: Failed to copy supervision.json');
       end;
     end;
   end;
