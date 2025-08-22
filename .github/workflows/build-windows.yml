@@ -242,26 +242,6 @@ jobs:
           Copy-Item "windows_emergency_fix.bat" -Destination "$packageDir\Emergency_Fix.bat"
         }
         
-        # Create README
-        $readmeLines = @(
-          "Baal Pet Assistant - Quick Start Guide",
-          "=======================================",
-          "",
-          "1. Double-click 'Start.bat' or 'WatchCats.exe' to run",
-          "2. Configure API keys on first run (right-click the cat icon)",
-          "3. Enjoy your AI desktop companion!",
-          "",
-          "If the app crashes:",
-          "-------------------",
-          "1. Run 'Emergency_Fix.bat' as administrator",
-          "2. Try 'Start.bat' instead of the exe directly",
-          "3. Install Visual C++ Redistributables from:",
-          "   https://aka.ms/vs/17/release/vc_redist.x64.exe",
-          "",
-          "For help: https://github.com/dazhanzheng/WatchCats"
-        )
-        $readmeLines -join "`n" | Out-File -FilePath "$packageDir\README.txt" -Encoding UTF8
-        
         # Create ZIP (compress contents directly, not the folder)
         $zipPath = "dist\BaalPetAssistant-Windows.zip"
         Compress-Archive -Path "$packageDir\*" -DestinationPath $zipPath -Force
