@@ -102,33 +102,33 @@ class ConfigManager:
             # Windows: 使用多种方法查找合适的配置目录
             config_dir = None
             
-            # 方法1: 使用 APPDATA 环境变量
-            appdata = os.environ.get('APPDATA')
-            if appdata and os.path.exists(appdata):
-                config_dir = Path(appdata) / "WatchCats"
-                self.logger.info(f"Using APPDATA: {config_dir}")
+            # 方法1: 优先使用 LOCALAPPDATA (本地应用数据)
+            localappdata = os.environ.get('LOCALAPPDATA')
+            if localappdata and os.path.exists(localappdata):
+                config_dir = Path(localappdata) / "WatchCats"
+                self.logger.info(f"Using LOCALAPPDATA: {config_dir}")
             
-            # 方法2: 使用 LOCALAPPDATA
+            # 方法2: 备选 APPDATA (Roaming)
             if not config_dir:
-                localappdata = os.environ.get('LOCALAPPDATA')
-                if localappdata and os.path.exists(localappdata):
-                    config_dir = Path(localappdata) / "WatchCats"
-                    self.logger.info(f"Using LOCALAPPDATA: {config_dir}")
+                appdata = os.environ.get('APPDATA')
+                if appdata and os.path.exists(appdata):
+                    config_dir = Path(appdata) / "WatchCats"
+                    self.logger.info(f"Using APPDATA (Roaming): {config_dir}")
             
             # 方法3: 通过 expanduser 和路径构建
             if not config_dir:
                 try:
                     home = Path.home()
                     # 尝试标准 Windows 路径
-                    appdata_roaming = home / 'AppData' / 'Roaming'
                     appdata_local = home / 'AppData' / 'Local'
+                    appdata_roaming = home / 'AppData' / 'Roaming'
                     
-                    if appdata_roaming.exists():
-                        config_dir = appdata_roaming / "WatchCats"
-                        self.logger.info(f"Using constructed Roaming path: {config_dir}")
-                    elif appdata_local.exists():
+                    if appdata_local.exists():
                         config_dir = appdata_local / "WatchCats"
                         self.logger.info(f"Using constructed Local path: {config_dir}")
+                    elif appdata_roaming.exists():
+                        config_dir = appdata_roaming / "WatchCats"
+                        self.logger.info(f"Using constructed Roaming path: {config_dir}")
                 except Exception as e:
                     self.logger.warning(f"Failed to construct AppData path: {e}")
             

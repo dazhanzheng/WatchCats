@@ -121,10 +121,10 @@ Source: "config_template.json"; DestDir: "{app}"; Flags: ignoreversion skipifsou
 Source: "..\USER_MANUAL.md"; DestDir: "{app}"; DestName: "用户手册.txt"; Flags: ignoreversion skipifsourcedoesntexist
 
 [Dirs]
-; 创建用户数据目录（使用 APPDATA/Roaming）
-Name: "{userappdata}\{#MyAppNameEN}"
-Name: "{userappdata}\{#MyAppNameEN}\logs"
-Name: "{userappdata}\{#MyAppNameEN}\data"
+; 创建用户数据目录（使用 LOCALAPPDATA）
+Name: "{localappdata}\{#MyAppNameEN}"
+Name: "{localappdata}\{#MyAppNameEN}\logs"
+Name: "{localappdata}\{#MyAppNameEN}\data"
 
 [Icons]
 ; Start menu shortcuts
@@ -154,6 +154,7 @@ Root: HKA; Subkey: "Software\Classes\Applications\{#MyAppExeName}\SupportedTypes
 
 ; 应用设置
 Root: HKCU; Subkey: "Software\{#MyAppPublisher}\{#MyAppNameEN}"; ValueType: string; ValueName: "InstallPath"; ValueData: "{app}"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\{#MyAppPublisher}\{#MyAppNameEN}"; ValueType: string; ValueName: "ConfigPath"; ValueData: "{localappdata}\{#MyAppNameEN}"
 Root: HKCU; Subkey: "Software\{#MyAppPublisher}\{#MyAppNameEN}"; ValueType: string; ValueName: "Version"; ValueData: "{#MyAppVersion}"
 
 [Run]
@@ -285,8 +286,8 @@ begin
     SaveStringToFile(QtConfPath, QtConfContent, False);
     
     // 创建默认配置文件（如果不存在）
-    // 注意：应用优先使用 APPDATA (Roaming)，所以配置保存在这里
-    ConfigPath := ExpandConstant('{userappdata}\{#MyAppNameEN}\config.json');
+    // 使用 LOCALAPPDATA 保存配置（不会漫游到其他设备）
+    ConfigPath := ExpandConstant('{localappdata}\{#MyAppNameEN}\config.json');
     if not FileExists(ConfigPath) then
     begin
       ForceDirectories(ExtractFilePath(ConfigPath));
