@@ -410,21 +410,21 @@ begin
     begin
       if GetUILanguage = $0804 then
       begin
-        MsgBox('已成功迁移 ' + IntToStr(FilesCopied) + ' 个文件从旧版本。' + #13#10 + 
-               #13#10 +
-               '旧版本数据保留在：' + #13#10 + 
-               OldConfigPath + #13#10 +
-               #13#10 +
+        MsgBox('已成功迁移 ' + IntToStr(FilesCopied) + ' 个文件从旧版本。' + Chr(13) + Chr(10) + 
+               Chr(13) + Chr(10) +
+               '旧版本数据保留在：' + Chr(13) + Chr(10) + 
+               OldConfigPath + Chr(13) + Chr(10) +
+               Chr(13) + Chr(10) +
                '确认新版本正常运行后，您可以手动删除该文件夹。', 
                mbInformation, MB_OK);
       end
       else
       begin
-        MsgBox('Successfully migrated ' + IntToStr(FilesCopied) + ' files from old version.' + #13#10 + 
-               #13#10 +
-               'Old data preserved at:' + #13#10 + 
-               OldConfigPath + #13#10 +
-               #13#10 +
+        MsgBox('Successfully migrated ' + IntToStr(FilesCopied) + ' files from old version.' + Chr(13) + Chr(10) + 
+               Chr(13) + Chr(10) +
+               'Old data preserved at:' + Chr(13) + Chr(10) + 
+               OldConfigPath + Chr(13) + Chr(10) +
+               Chr(13) + Chr(10) +
                'You can manually delete this folder after confirming the new version works.', 
                mbInformation, MB_OK);
       end;
