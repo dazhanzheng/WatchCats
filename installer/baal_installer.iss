@@ -403,28 +403,28 @@ begin
     
     WizardForm.ProgressGauge.Style := npbstNormal;
     
-    // 如果成功迁移了文件，询问是否删除旧数据
+    // 如果成功迁移了文件，只提示用户
     if FilesCopied > 0 then
     begin
       if GetUILanguage = $0804 then
       begin
-        if MsgBox('已成功迁移 ' + IntToStr(FilesCopied) + ' 个文件从旧版本。' + #13#10 + 
-                  '是否删除旧版本数据？' + #13#10 + 
-                  '路径: ' + OldConfigPath, 
-                  mbConfirmation, MB_YESNO) = IDYES then
-        begin
-          DelTree(OldConfigPath, True, True, True);
-        end;
+        MsgBox('已成功迁移 ' + IntToStr(FilesCopied) + ' 个文件从旧版本。' + #13#10 + 
+               #13#10 +
+               '旧版本数据保留在：' + #13#10 + 
+               OldConfigPath + #13#10 +
+               #13#10 +
+               '确认新版本正常运行后，您可以手动删除该文件夹。', 
+               mbInformation, MB_OK);
       end
       else
       begin
-        if MsgBox('Successfully migrated ' + IntToStr(FilesCopied) + ' files from old version.' + #13#10 + 
-                  'Delete old version data?' + #13#10 + 
-                  'Path: ' + OldConfigPath, 
-                  mbConfirmation, MB_YESNO) = IDYES then
-        begin
-          DelTree(OldConfigPath, True, True, True);
-        end;
+        MsgBox('Successfully migrated ' + IntToStr(FilesCopied) + ' files from old version.' + #13#10 + 
+               #13#10 +
+               'Old data preserved at:' + #13#10 + 
+               OldConfigPath + #13#10 +
+               #13#10 +
+               'You can manually delete this folder after confirming the new version works.', 
+               mbInformation, MB_OK);
       end;
     end;
   end;

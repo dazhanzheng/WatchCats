@@ -205,32 +205,28 @@ begin
     end
     else
     begin
-      // 完全成功，询问是否删除旧数据
+      // 完全成功，只提示用户可以手动删除
       if GetUILanguage = $0804 then
       begin
-        if MsgBox('数据迁移成功！' + #13#10 + 
-                  '成功迁移 ' + IntToStr(FilesCopied) + ' 个项目。' + #13#10 +
-                  #13#10 +
-                  '是否删除旧版本数据？' + #13#10 + 
-                  '路径: ' + OldConfigPath + #13#10 +
-                  #13#10 +
-                  '建议：先确认新版本正常运行后再删除旧数据。',
-                  mbConfirmation, MB_YESNO) = IDNO then // 注意这里改为 IDNO
-        begin
-          // 用户选择保留旧数据（推荐）
-          MsgBox('旧数据已保留。您可以在确认新版本正常后手动删除：' + #13#10 + OldConfigPath,
-                 mbInformation, MB_OK);
-        end
-        else
-        begin
-          // 用户选择删除旧数据
-          if not DelTree(OldConfigPath, True, True, True) then
-          begin
-            MsgBox('无法删除旧数据，可能是权限问题。' + #13#10 + 
-                   '您可以手动删除: ' + OldConfigPath,
-                   mbError, MB_OK);
-          end;
-        end;
+        MsgBox('数据迁移成功！' + #13#10 + 
+               '成功迁移 ' + IntToStr(FilesCopied) + ' 个项目。' + #13#10 +
+               #13#10 +
+               '旧版本数据已保留在：' + #13#10 + 
+               OldConfigPath + #13#10 +
+               #13#10 +
+               '建议：确认新版本正常运行后，您可以手动删除旧数据文件夹。',
+               mbInformation, MB_OK);
+      end
+      else
+      begin
+        MsgBox('Data migration successful!' + #13#10 + 
+               'Successfully migrated ' + IntToStr(FilesCopied) + ' items.' + #13#10 +
+               #13#10 +
+               'Old data preserved at:' + #13#10 + 
+               OldConfigPath + #13#10 +
+               #13#10 +
+               'Recommendation: After confirming the new version works properly, you can manually delete the old data folder.',
+               mbInformation, MB_OK);
       end;
     end;
   end

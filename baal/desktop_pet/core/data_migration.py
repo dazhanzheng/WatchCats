@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 from typing import Optional, Dict, Any
 import sys
+from datetime import datetime
 
 
 class DataMigration:
@@ -155,7 +156,7 @@ class DataMigration:
             if result['files_migrated']:
                 self.migration_flag_file.write_text(
                     json.dumps({
-                        'migration_date': str(Path.cwd()),
+                        'migration_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                         'files_migrated': result['files_migrated'],
                         'from': str(self.old_dir),
                         'to': str(self.new_dir)
@@ -186,7 +187,7 @@ class DataMigration:
         try:
             # 创建一个标记文件，表示可以删除
             marker_file = self.old_dir / '.can_be_deleted'
-            marker_file.write_text(f"This directory can be safely deleted.\nMigrated to: {self.new_dir}\nDate: {Path.cwd()}")
+            marker_file.write_text(f"This directory can be safely deleted.\nMigrated to: {self.new_dir}\nDate: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             print(f"Marked old directory for deletion: {self.old_dir}")
             # 不实际删除，让用户手动删除
             return False
@@ -205,7 +206,36 @@ def auto_migrate() -> Optional[Dict[str, Any]]:
         
         if result['success']:
             print(f"Successfully migrated {len(result['files_migrated'])} items")
-            # 注意：这里不自动删除旧数据，让用户决定
+            print(f"Old data preserved at: {migrator.old_dir}")
+            print("You can manually delete the old folder after confirming everything works.")
+            
+            # 创建一个说明文件在旧目录
+            try:
+                readme_file = migrator.old_dir / 'README_MIGRATION.txt'
+                readme_content = f"""数据迁移说明 / Data Migration Notice
+=====================================
+
+此文件夹包含旧版本 BaalPet 的数据。
+This folder contains old BaalPet data.
+
+数据已成功迁移到新位置：
+Data has been migrated to:
+{migrator.new_dir}
+
+迁移时间 / Migration date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+建议：
+- 确认新版本 WatchCats 正常运行后再删除此文件夹
+- 如果新版本有问题，可以从这里恢复数据
+
+Recommendation:
+- Delete this folder only after confirming WatchCats works properly
+- If there are issues, you can restore data from here
+"""
+                readme_file.write_text(readme_content, encoding='utf-8')
+            except:
+                pass  # 创建说明文件失败不影响主流程
+                
         else:
             print(f"Migration had errors: {result['errors']}")
             
