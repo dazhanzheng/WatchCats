@@ -409,11 +409,9 @@ begin
     end;
     
   except
-    on E: Exception do
-    begin
-      Log('SafeCopyFile: Exception - ' + E.Message);
-      Result := False;
-    end;
+    // Inno Setup Pascal Script 不支持 on E: Exception do 语法
+    Log('SafeCopyFile: Exception occurred');
+    Result := False;
   end;
   
   if not Result then
