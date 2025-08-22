@@ -26,7 +26,7 @@ DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=Output
 OutputBaseFilename=WatchCats-Setup
-SetupIconFile=..\baal\resources\cat.ico
+SetupIconFile=..\baal\resources\watchcats_hq.ico
 ; 用于检测应用程序是否运行
 AppMutex={#MyAppNameEN}Mutex
 Compression=lzma2/max
@@ -83,9 +83,9 @@ english.StartupIcon=Start automatically at Windows startup
 english.StartupIconDesc=Configure {#MyAppName} to start automatically
 
 [Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checked
 Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked; OnlyBelowVersion: 6.1; Check: not IsWin64
-Name: "startupicon"; Description: "{cm:StartupIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "startupicon"; Description: "{cm:StartupIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checked
 
 [Files]
 ; 主程序

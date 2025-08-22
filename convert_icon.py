@@ -106,7 +106,8 @@ def main():
     
     # Try different possible icon locations
     possible_icons = [
-        os.path.join(script_dir, "baal", "resources", "baallogo.png"),  # Primary icon
+        os.path.join(script_dir, "baal", "resources", "cat.png"),  # WatchCats primary icon
+        os.path.join(script_dir, "baal", "resources", "baallogo.png"),  # Legacy icon
         os.path.join(script_dir, "baal", "resources", "baal_logo.png"),  # Alternative name
         os.path.join(script_dir, "baal", "resources", "app_icon.png"),
         os.path.join(script_dir, "baal", "resources", "icon.png"),
@@ -135,8 +136,8 @@ def main():
             print(f"Could not create default icon: {e}")
         return 0  # Don't fail the build
     
-    # Output path
-    ico_path = os.path.join(script_dir, "baal", "resources", "app_icon.ico")
+    # Output path - create high-quality icon for WatchCats
+    ico_path = os.path.join(script_dir, "baal", "resources", "watchcats_hq.ico")
     
     # Ensure output directory exists
     os.makedirs(os.path.dirname(ico_path), exist_ok=True)

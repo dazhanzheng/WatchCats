@@ -60,6 +60,20 @@ jobs:
       run: |
         .\venv\Scripts\activate
         python convert_icon.py
+        # Also verify the high-quality icon was created
+        if (Test-Path "baal\resources\watchcats_hq.ico") {
+          Write-Host "[OK] High-quality icon created successfully"
+        } else {
+          Write-Host "[WARNING] High-quality icon not created, trying fallback..."
+          # Try to copy any existing icon as fallback
+          if (Test-Path "baal\resources\app_icon.ico") {
+            Copy-Item "baal\resources\app_icon.ico" "baal\resources\watchcats_hq.ico"
+            Write-Host "Used app_icon.ico as fallback"
+          } elseif (Test-Path "baal\resources\cat.ico") {
+            Copy-Item "baal\resources\cat.ico" "baal\resources\watchcats_hq.ico"
+            Write-Host "Used cat.ico as fallback"
+          }
+        }
 
     - name: Verify Qt plugins before build
       run: |
