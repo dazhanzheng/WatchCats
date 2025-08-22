@@ -2,8 +2,7 @@
 ; Creates a traditional Windows installer with runtime dependency checks
 ; 创建传统的Windows安装程序，自动安装运行时依赖
 
-; 包含改进的迁移函数
-#include "migrate_data.iss"
+; 移除 include，直接在主文件中定义函数
 
 #define MyAppName "WatchCats"
 #define MyAppNameEN "WatchCats"
@@ -439,8 +438,8 @@ begin
   NeedsRestart := False;
   Result := '';
   
-  // 使用改进的迁移函数
-  MigrateOldDataImproved();
+  // 执行数据迁移
+  MigrateOldData();
   
   // AppMutex 在 [Setup] 中已经配置，Inno Setup 会自动检查
   // 如果需要手动检查，可以使用 CheckForMutexes 函数
