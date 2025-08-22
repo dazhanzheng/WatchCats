@@ -431,7 +431,8 @@ procedure UpdateConfigModel(ConfigPath: String);
 var
   ConfigContent: AnsiString;
   UpdatedContent: String;
-  SearchPos: Integer;
+  ModelPos, ColonPos, QuotePos, EndQuotePos: Integer;
+  TempStr: String;
 begin
   try
     // 读取文件内容
@@ -440,30 +441,41 @@ begin
       UpdatedContent := ConfigContent;
       
       // 查找 "model" 字段
-      SearchPos := Pos('"model"', UpdatedContent);
-      if SearchPos > 0 then
+      ModelPos := Pos('"model"', UpdatedContent);
+      if ModelPos > 0 then
       begin
-        // 找到model字段后的冒号
-        SearchPos := Pos(':', UpdatedContent, SearchPos);
-        if SearchPos > 0 then
+        // 从model位置开始查找冒号
+        TempStr := Copy(UpdatedContent, ModelPos, Length(UpdatedContent) - ModelPos + 1);
+        ColonPos := Pos(':', TempStr);
+        if ColonPos > 0 then
         begin
           // 找到值的开始引号
-          SearchPos := Pos('"', UpdatedContent, SearchPos);
-          if SearchPos > 0 then
+          TempStr := Copy(TempStr, ColonPos, Length(TempStr) - ColonPos + 1);
+          QuotePos := Pos('"', TempStr);
+          if QuotePos > 0 then
           begin
-            // 删除旧值直到下一个引号
-            Delete(UpdatedContent, SearchPos + 1, Pos('"', UpdatedContent, SearchPos + 1) - SearchPos - 1);
-            // 插入新值
-            Insert('doubao-seed-1-6-flash-250715', UpdatedContent, SearchPos + 1);
+            // 计算绝对位置
+            QuotePos := ModelPos + ColonPos + QuotePos - 2;
             
-            // 保存更新后的内容
-            if SaveStringToFile(ConfigPath, AnsiString(UpdatedContent), False) then
+            // 找到结束引号
+            TempStr := Copy(UpdatedContent, QuotePos + 1, Length(UpdatedContent) - QuotePos);
+            EndQuotePos := Pos('"', TempStr);
+            if EndQuotePos > 0 then
             begin
-              Log('UpdateConfigModel: Successfully updated model to doubao-seed-1-6-flash-250715');
-            end
-            else
-            begin
-              Log('UpdateConfigModel: Failed to save updated config');
+              // 删除旧值
+              Delete(UpdatedContent, QuotePos + 1, EndQuotePos - 1);
+              // 插入新值
+              Insert('doubao-seed-1-6-flash-250715', UpdatedContent, QuotePos + 1);
+              
+              // 保存更新后的内容
+              if SaveStringToFile(ConfigPath, AnsiString(UpdatedContent), False) then
+              begin
+                Log('UpdateConfigModel: Successfully updated model to doubao-seed-1-6-flash-250715');
+              end
+              else
+              begin
+                Log('UpdateConfigModel: Failed to save updated config');
+              end;
             end;
           end;
         end;
