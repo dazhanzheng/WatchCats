@@ -56,7 +56,6 @@ VersionInfoCopyright=Copyright (C) 2025 {#MyAppPublisher}
 MinVersion=10.0.17763
 
 [Languages]
-Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [CustomMessages]
@@ -67,13 +66,6 @@ english.CreateQuickLaunchIcon=Create a &Quick Launch shortcut
 english.InstallVCRedist=Installing Visual C++ Runtime...
 english.CheckingDependencies=Checking system dependencies...
 english.ConfiguringApp=Configuring application...
-; Chinese messages
-chinesesimplified.LaunchProgram=运行 {#MyAppName}
-chinesesimplified.CreateDesktopIcon=创建桌面快捷方式(&D)
-chinesesimplified.CreateQuickLaunchIcon=创建快速启动栏图标(&Q)
-chinesesimplified.InstallVCRedist=正在安装 Visual C++ 运行库...
-chinesesimplified.CheckingDependencies=正在检查系统依赖项...
-chinesesimplified.ConfiguringApp=正在配置应用程序...
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
@@ -184,10 +176,7 @@ begin
   // 检查是否已安装旧版本
   if RegKeyExists(HKEY_CURRENT_USER, 'Software\{#MyAppPublisher}\{#MyAppNameEN}') then
   begin
-    if ActiveLanguage = 'chinesesimplified' then
-      Message := '检测到已安装的版本。是否继续安装？'
-    else
-      Message := 'Previous version detected. Continue with installation?';
+    Message := 'Previous version detected. Continue with installation?';
       
     if MsgBox(Message, mbConfirmation, MB_YESNO) = IDNO then
     begin
@@ -199,10 +188,7 @@ begin
   // 检查 Visual C++ Redistributable
   if not VCRedist64Installed() then
   begin
-    if ActiveLanguage = 'chinesesimplified' then
-      Message := 'Visual C++ 运行库未检测到。' + #13#10 + '安装程序将自动安装所需的运行库。'
-    else
-      Message := 'Visual C++ Redistributable not detected.' + #13#10 + 'The installer will install the required runtime.';
+    Message := 'Visual C++ Redistributable not detected.' + #13#10 + 'The installer will install the required runtime.';
       
     MsgBox(Message, mbInformation, MB_OK);
   end;
@@ -214,10 +200,7 @@ var
   ResultCode: Integer;
   StatusText: String;
 begin
-  if ActiveLanguage = 'chinesesimplified' then
-    StatusText := '正在安装 Visual C++ 运行库...'
-  else
-    StatusText := 'Installing Visual C++ Runtime...';
+  StatusText := CustomMessage('InstallVCRedist');
     
   WizardForm.StatusLabel.Caption := StatusText;
   WizardForm.ProgressGauge.Style := npbstMarquee;
@@ -261,10 +244,7 @@ begin
   else if CurStep = ssPostInstall then
   begin
     // 配置应用程序
-    if ActiveLanguage = 'chinesesimplified' then
-      StatusText := '正在配置应用程序...'
-    else
-      StatusText := 'Configuring application...';
+    StatusText := CustomMessage('ConfiguringApp');
     WizardForm.StatusLabel.Caption := StatusText;
     
     // 创建 qt.conf 文件（解决 Qt 插件路径问题）
@@ -302,9 +282,6 @@ begin
   // 检查程序是否正在运行
   if CheckForMutexes('{#MyAppNameEN}Mutex') then
   begin
-    if ActiveLanguage = 'chinesesimplified' then
-      Result := '程序正在运行，请先关闭程序后再继续安装。'
-    else
-      Result := 'The application is currently running. Please close it before continuing.';
+    Result := 'The application is currently running. Please close it before continuing.';
   end;
 end;
