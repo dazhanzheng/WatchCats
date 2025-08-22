@@ -161,28 +161,38 @@ class SupervisionMode(QObject):
         return True
     
     def stop_supervision(self):
-        """停止监督模式，确保正确清理资源"""
+        """停止监督模式，确保正确清理资源（非阻塞）"""
         self.is_active = False
         self._stop_event.set()  # 设置停止事件
         
-        # 等待线程结束
+        # 使用非阻塞方式处理线程结束
         if self.check_thread and self.check_thread.is_alive():
-            logger.info("等待监督线程结束...")
-            self.check_thread.join(timeout=SUPERVISION['thread_join_timeout'])  # 最多等待5秒
-            if self.check_thread.is_alive():
-                logger.warning("监督线程未能在5秒内结束")
-            else:
-                logger.info("监督线程已成功结束")
+            logger.info("发送停止信号给监督线程...")
+            # 启动一个独立线程来清理，避免阻塞UI
+            import threading
+            def cleanup_thread():
+                try:
+                    # 给线程一个短暂的时间来自然结束
+                    self.check_thread.join(timeout=0.5)  # 只等待0.5秒
+                    if self.check_thread.is_alive():
+                        logger.info("监督线程仍在运行，将在后台清理")
+                    else:
+                        logger.info("监督线程已成功结束")
+                except Exception as e:
+                    logger.error(f"清理监督线程时出错: {e}")
+            
+            cleanup = threading.Thread(target=cleanup_thread, daemon=True)
+            cleanup.start()
         
-        # 清理线程引用
+        # 立即清理线程引用和重置状态
         self.check_thread = None
         self._stop_event.clear()  # 重置事件，为下次使用准备
         
         self.mode_changed.emit(False)
-        logger.info("监督模式已停止")
+        logger.info("监督模式已停止（非阻塞）")
     
     def _check_loop(self):
-        """检查循环，使用事件机制优雅停止"""
+        """检查循环，使用短间隔事件检查机制以实现快速响应"""
         logger.info(f"检查线程已启动，每{self.check_interval}秒检查一次")
         
         # 首次启动后立即进行一次检查（可选，用于测试）
@@ -194,26 +204,48 @@ class SupervisionMode(QObject):
             except Exception as e:
                 logger.error(f"首次检查出错: {e}")
         
+        # 记录下次检查时间
+        next_check_time = time.time() + self.check_interval
+        
         while self.is_active:
-            # 使用事件等待，这样可以被中断
-            if self._stop_event.wait(timeout=self.check_interval):
+            # 使用短间隔检查，以便快速响应停止信号
+            # 每0.1秒检查一次停止事件，但只在到达检查间隔时执行实际检查
+            if self._stop_event.wait(timeout=0.1):  # 0.1秒的短间隔
                 # 如果事件被设置，说明需要停止
-                logger.info("收到停止信号，检查线程正在退出")
+                logger.info("收到停止信号，检查线程立即退出")
                 return
             
             if not self.is_active:
+                logger.info("检测到is_active=False，退出检查循环")
                 break
             
-            logger.debug(f"执行定期检查... (时间: {datetime.now().strftime('%H:%M:%S')})")
-            try:
-                self._check_activity()
-            except Exception as e:
-                logger.error(f"检查活动时出错: {e}")
+            # 检查是否到达下次检查时间
+            current_time = time.time()
+            if current_time >= next_check_time:
+                logger.debug(f"执行定期检查... (时间: {datetime.now().strftime('%H:%M:%S')})")
+                try:
+                    # 在执行检查前再次确认是否应该继续
+                    if not self.is_active or self._stop_event.is_set():
+                        logger.info("检查被取消，监督模式正在停止")
+                        break
+                    
+                    self._check_activity()
+                    # 更新下次检查时间
+                    next_check_time = current_time + self.check_interval
+                except Exception as e:
+                    logger.error(f"检查活动时出错: {e}")
+                    # 出错后也要更新下次检查时间
+                    next_check_time = current_time + self.check_interval
         
         logger.info("检查循环已退出")
     
     def _check_activity(self):
-        """检查用户活动是否符合目标"""
+        """检查用户活动是否符合目标（带中断检查）"""
+        # 检查是否应该继续
+        if not self.is_active or self._stop_event.is_set():
+            logger.info("检查活动被中断，监督模式正在停止")
+            return
+        
         # 获取过去5分钟的活动数据
         current_time = datetime.now()
         logger.info(f"开始检查活动... (时间: {current_time.strftime('%H:%M:%S')})")
@@ -224,14 +256,29 @@ class SupervisionMode(QObject):
             self.last_check_time = current_time
             return
         
+        # 在获取统计前再次检查
+        if not self.is_active or self._stop_event.is_set():
+            logger.info("统计获取前检测到停止信号")
+            return
+        
         logger.debug("用户活跃，获取活动统计...")
         # 获取多时段的活动统计
         stats = self._get_comprehensive_activity_stats()
+        
+        # 在评估前再次检查
+        if not self.is_active or self._stop_event.is_set():
+            logger.info("评估前检测到停止信号")
+            return
         
         if stats:
             logger.debug(f"统计数据获取成功: {list(stats.keys())}")
             # 使用增强的LLM评估
             evaluation_result = self._evaluate_activity_enhanced(stats)
+            
+            # 在发送提醒前最后一次检查
+            if not self.is_active or self._stop_event.is_set():
+                logger.info("发送提醒前检测到停止信号")
+                return
             
             if evaluation_result:
                 logger.info(f"评估结果: should_remind={evaluation_result.get('should_remind')}, "
@@ -241,8 +288,12 @@ class SupervisionMode(QObject):
                     logger.warning("需要提醒用户！")
                     # 生成增强的提醒内容
                     reminder_context = self._create_enhanced_reminder_context(stats, evaluation_result)
-                    self.reminder_needed.emit(reminder_context)
-                    logger.debug(f"提醒内容: {reminder_context.get('message', '')[:100]}...")
+                    # 最终检查
+                    if self.is_active and not self._stop_event.is_set():
+                        self.reminder_needed.emit(reminder_context)
+                        logger.debug(f"提醒内容: {reminder_context.get('message', '')[:100]}...")
+                    else:
+                        logger.info("提醒被取消，监督模式已停止")
                 else:
                     logger.info("用户活动符合目标，无需提醒")
             else:
@@ -294,7 +345,7 @@ class SupervisionMode(QObject):
             return False
     
     def _get_comprehensive_activity_stats(self) -> Dict[str, Any]:
-        """获取多时段的综合活动统计
+        """获取多时段的综合活动统计（可中断）
         
         Returns:
             包含5分钟、2小时和24小时活动统计的字典
@@ -303,13 +354,28 @@ class SupervisionMode(QObject):
             with self.stats_processor as sp:
                 logger.info("开始获取多时段活动统计...")
                 
+                # 检查是否应该继续
+                if not self.is_active or self._stop_event.is_set():
+                    logger.info("统计获取被中断")
+                    return {}
+                
                 # 5分钟数据
                 stats_5m = sp.get_stats_5m()
                 logger.debug(f"✓ 5分钟数据获取成功 (长度: {len(stats_5m)} 字符)")
                 
+                # 检查是否应该继续
+                if not self.is_active or self._stop_event.is_set():
+                    logger.info("统计获取被中断")
+                    return {}
+                
                 # 2小时数据
                 stats_2h = sp.get_stats_2h()
                 logger.debug(f"✓ 2小时数据获取成功 (长度: {len(stats_2h)} 字符)")
+                
+                # 检查是否应该继续
+                if not self.is_active or self._stop_event.is_set():
+                    logger.info("统计获取被中断")
+                    return {}
                 
                 # 24小时数据（获取今日数据作为24小时数据）
                 stats_24h = sp.get_stats_today()
@@ -317,8 +383,11 @@ class SupervisionMode(QObject):
                 
                 # 额外获取精确的过去24小时数据
                 try:
-                    stats_last_24h = sp.get_detailed_stats(24)
-                    logger.debug(f"✓ 精确24小时数据获取成功 (长度: {len(stats_last_24h)} 字符)")
+                    if self.is_active and not self._stop_event.is_set():
+                        stats_last_24h = sp.get_detailed_stats(24)
+                        logger.debug(f"✓ 精确24小时数据获取成功 (长度: {len(stats_last_24h)} 字符)")
+                    else:
+                        stats_last_24h = stats_24h
                 except:
                     stats_last_24h = stats_24h  # 如果失败，使用今日数据作为备份
                 
