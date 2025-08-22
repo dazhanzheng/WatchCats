@@ -121,7 +121,7 @@ Source: "config_template.json"; DestDir: "{app}"; Flags: ignoreversion skipifsou
 Source: "..\USER_MANUAL.md"; DestDir: "{app}"; DestName: "用户手册.txt"; Flags: ignoreversion skipifsourcedoesntexist
 
 [Dirs]
-; 创建用户数据目录
+; 创建用户数据目录（使用 APPDATA/Roaming）
 Name: "{userappdata}\{#MyAppNameEN}"
 Name: "{userappdata}\{#MyAppNameEN}\logs"
 Name: "{userappdata}\{#MyAppNameEN}\data"
@@ -285,6 +285,7 @@ begin
     SaveStringToFile(QtConfPath, QtConfContent, False);
     
     // 创建默认配置文件（如果不存在）
+    // 注意：应用优先使用 APPDATA (Roaming)，所以配置保存在这里
     ConfigPath := ExpandConstant('{userappdata}\{#MyAppNameEN}\config.json');
     if not FileExists(ConfigPath) then
     begin
@@ -293,11 +294,9 @@ begin
                                   '  "version": "' + '{#MyAppVersion}' + '",' + #13#10 +
                                   '  "first_run": true,' + #13#10 +
                                   '  "language": "zh_CN",' + #13#10 +
-                                  '  "api_keys": {' + #13#10 +
-                                  '    "volcengine_api_key": "26a86139-4cfe-4a03-8b53-c99c42ce369c",' + #13#10 +
-                                  '    "volcengine_base_url": "https://ark.cn-beijing.volces.com/api/v3",' + #13#10 +
-                                  '    "volcengine_model": "ep-20241219002916-6m8sk"' + #13#10 +
-                                  '  }' + #13#10 +
+                                  '  "api_key": "26a86139-4cfe-4a03-8b53-c99c42ce369c",' + #13#10 +
+                                  '  "base_url": "https://ark.cn-beijing.volces.com/api/v3",' + #13#10 +
+                                  '  "model": "ep-20241222163908-mmtfh"' + #13#10 +
                                   '}', False);
     end;
     
