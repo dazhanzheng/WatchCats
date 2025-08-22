@@ -2,6 +2,9 @@
 ; Creates a traditional Windows installer with runtime dependency checks
 ; 创建传统的Windows安装程序，自动安装运行时依赖
 
+; 包含改进的迁移函数
+#include "migrate_data.iss"
+
 #define MyAppName "WatchCats"
 #define MyAppNameEN "WatchCats"
 #define MyAppVersion "0.1.3"
@@ -429,9 +432,6 @@ begin
     end;
   end;
 end;
-
-// 包含改进的迁移函数
-#include "migrate_data.iss"
 
 // 卸载前的操作
 function PrepareToInstall(var NeedsRestart: Boolean): String;

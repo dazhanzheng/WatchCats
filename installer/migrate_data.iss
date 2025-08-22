@@ -85,7 +85,7 @@ begin
   // 定义路径
   OldConfigPath := ExpandConstant('{userappdata}\BaalPet');
   NewConfigPath := ExpandConstant('{localappdata}\WatchCats');
-  BackupPath := ExpandConstant('{localappdata}\WatchCats_backup_') + GetDateTimeString('yyyymmdd_hhnnss', '-', '-');
+  BackupPath := ExpandConstant('{localappdata}\WatchCats_backup');
   
   // 检查旧版本目录是否存在
   if not DirExists(OldConfigPath) then
