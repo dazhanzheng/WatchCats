@@ -314,11 +314,128 @@ begin
   end;
 end;
 
+// 迁移旧版本数据
+procedure MigrateOldData();
+var
+  OldConfigPath: String;
+  NewConfigPath: String;
+  OldMemoryPath: String;
+  NewMemoryPath: String;
+  ResultCode: Integer;
+  StatusText: String;
+  FilesCopied: Integer;
+begin
+  // 定义旧版本路径 (BaalPet in Roaming)
+  OldConfigPath := ExpandConstant('{userappdata}\BaalPet');
+  // 定义新版本路径 (WatchCats in Local)
+  NewConfigPath := ExpandConstant('{localappdata}\WatchCats');
+  
+  // 检查旧版本目录是否存在
+  if DirExists(OldConfigPath) then
+  begin
+    StatusText := '检测到旧版本数据，正在迁移...';
+    if GetUILanguage <> $0804 then
+      StatusText := 'Old version data detected, migrating...';
+    
+    WizardForm.StatusLabel.Caption := StatusText;
+    WizardForm.ProgressGauge.Style := npbstMarquee;
+    
+    // 确保新目录存在
+    ForceDirectories(NewConfigPath);
+    
+    FilesCopied := 0;
+    
+    // 迁移 config.json
+    if FileExists(OldConfigPath + '\config.json') then
+    begin
+      if not FileExists(NewConfigPath + '\config.json') then
+      begin
+        FileCopy(OldConfigPath + '\config.json', NewConfigPath + '\config.json', False);
+        FilesCopied := FilesCopied + 1;
+      end;
+    end;
+    
+    // 迁移 chat_history.json (聊天记录)
+    if FileExists(OldConfigPath + '\chat_history.json') then
+    begin
+      if not FileExists(NewConfigPath + '\chat_history.json') then
+      begin
+        FileCopy(OldConfigPath + '\chat_history.json', NewConfigPath + '\chat_history.json', False);
+        FilesCopied := FilesCopied + 1;
+      end;
+    end;
+    
+    // 迁移 memory 文件夹（如果存在）
+    OldMemoryPath := OldConfigPath + '\memory';
+    NewMemoryPath := NewConfigPath + '\memory';
+    if DirExists(OldMemoryPath) then
+    begin
+      if not DirExists(NewMemoryPath) then
+      begin
+        ForceDirectories(NewMemoryPath);
+        // 复制 memory 文件夹中的所有文件
+        Exec('xcopy', '"' + OldMemoryPath + '\*" "' + NewMemoryPath + '\" /E /Y /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+        FilesCopied := FilesCopied + 1;
+      end;
+    end;
+    
+    // 迁移 schedules.json (日程文件)
+    if FileExists(OldConfigPath + '\schedules.json') then
+    begin
+      if not FileExists(NewConfigPath + '\schedules.json') then
+      begin
+        FileCopy(OldConfigPath + '\schedules.json', NewConfigPath + '\schedules.json', False);
+        FilesCopied := FilesCopied + 1;
+      end;
+    end;
+    
+    // 迁移 goals.json (目标文件)
+    if FileExists(OldConfigPath + '\goals.json') then
+    begin
+      if not FileExists(NewConfigPath + '\goals.json') then
+      begin
+        FileCopy(OldConfigPath + '\goals.json', NewConfigPath + '\goals.json', False);
+        FilesCopied := FilesCopied + 1;
+      end;
+    end;
+    
+    WizardForm.ProgressGauge.Style := npbstNormal;
+    
+    // 如果成功迁移了文件，询问是否删除旧数据
+    if FilesCopied > 0 then
+    begin
+      if GetUILanguage = $0804 then
+      begin
+        if MsgBox('已成功迁移 ' + IntToStr(FilesCopied) + ' 个文件从旧版本。' + #13#10 + 
+                  '是否删除旧版本数据？' + #13#10 + 
+                  '路径: ' + OldConfigPath, 
+                  mbConfirmation, MB_YESNO) = IDYES then
+        begin
+          DelTree(OldConfigPath, True, True, True);
+        end;
+      end
+      else
+      begin
+        if MsgBox('Successfully migrated ' + IntToStr(FilesCopied) + ' files from old version.' + #13#10 + 
+                  'Delete old version data?' + #13#10 + 
+                  'Path: ' + OldConfigPath, 
+                  mbConfirmation, MB_YESNO) = IDYES then
+        begin
+          DelTree(OldConfigPath, True, True, True);
+        end;
+      end;
+    end;
+  end;
+end;
+
 // 卸载前的操作
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
   NeedsRestart := False;
   Result := '';
+  
+  // 迁移旧版本数据
+  MigrateOldData();
   
   // AppMutex 在 [Setup] 中已经配置，Inno Setup 会自动检查
   // 如果需要手动检查，可以使用 CheckForMutexes 函数

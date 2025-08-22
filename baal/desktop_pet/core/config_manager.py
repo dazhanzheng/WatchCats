@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 from .logger_config import get_logger, log_performance
 from .default_config import get_default_config
+from .data_migration import auto_migrate
 
 
 class ConfigManager:
@@ -44,6 +45,14 @@ class ConfigManager:
         
         # 确保配置目录存在
         self._ensure_config_dir()
+        
+        # 尝试自动迁移旧版本数据
+        try:
+            migration_result = auto_migrate()
+            if migration_result and migration_result.get('success'):
+                self.logger.info(f"Data migration successful: {migration_result.get('files_migrated', [])}")
+        except Exception as e:
+            self.logger.warning(f"Data migration check failed: {e}")
         
         # 加载配置
         self.config = self._load_config()
