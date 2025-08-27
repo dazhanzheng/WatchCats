@@ -199,28 +199,169 @@ jobs:
           exit 1
         }
     
-    - name: Create installer (optional)
+    - name: Prepare installer resources
       shell: powershell
-      continue-on-error: true
       run: |
-        Write-Host "Checking for Inno Setup..." -ForegroundColor Yellow
+        Write-Host "Preparing installer resources..." -ForegroundColor Yellow
         
+        # 检查并创建必要的目录
+        if (-not (Test-Path "installer\icons")) {
+          New-Item -ItemType Directory -Force -Path "installer\icons" | Out-Null
+        }
+        
+        if (-not (Test-Path "installer\vcredist")) {
+          New-Item -ItemType Directory -Force -Path "installer\vcredist" | Out-Null
+        }
+        
+        # 准备高质量图标文件
+        if (Test-Path "baal\resources\app_icon.ico") {
+          Copy-Item "baal\resources\app_icon.ico" "installer\icons\WatchCats.ico" -Force
+          Write-Host "✓ Copied application icon" -ForegroundColor Green
+        } else {
+          Write-Host "Warning: app_icon.ico not found" -ForegroundColor Yellow
+        }
+        
+        # 准备 PNG 图标（如果存在）
+        if (Test-Path "baal\resources\cat.png") {
+          Copy-Item "baal\resources\cat.png" "installer\icons\WatchCats_256.png" -Force
+          Write-Host "✓ Copied PNG icon" -ForegroundColor Green
+        }
+        
+        # 下载 Visual C++ Redistributables
+        Write-Host "Downloading Visual C++ Redistributables..." -ForegroundColor Yellow
+        
+        $vcredistUrls = @{
+          "x64" = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
+          "x86" = "https://aka.ms/vs/17/release/vc_redist.x86.exe"
+        }
+        
+        foreach ($arch in $vcredistUrls.Keys) {
+          $url = $vcredistUrls[$arch]
+          $output = "installer\vcredist\vc_redist.$arch.exe"
+          
+          if (-not (Test-Path $output)) {
+            try {
+              Write-Host "  Downloading $arch redistributable..." -ForegroundColor Gray
+              Invoke-WebRequest -Uri $url -OutFile $output -UseBasicParsing
+              Write-Host "  ✓ Downloaded vc_redist.$arch.exe" -ForegroundColor Green
+            } catch {
+              Write-Host "  Warning: Failed to download $arch redistributable" -ForegroundColor Yellow
+              Write-Host "  Error: $_" -ForegroundColor Red
+            }
+          } else {
+            Write-Host "  ✓ vc_redist.$arch.exe already exists" -ForegroundColor Green
+          }
+        }
+        
+        # 创建配置模板文件
+        $configTemplate = @{
+          version = "0.1.3"
+          first_run = $true
+          language = "zh_CN"
+          api_key = "6be4b0c1-8e71-4530-908a-cbe4b48a9a07"
+          base_url = "https://ark.cn-beijing.volces.com/api/v3"
+          model = "doubao-seed-1-6-flash-250715"
+        } | ConvertTo-Json -Depth 10
+        
+        $configTemplate | Set-Content -Path "installer\config_template.json" -Encoding UTF8
+        Write-Host "✓ Created config template" -ForegroundColor Green
+        
+        # 创建 installer wizard 图片（如果需要）
+        if (-not (Test-Path "installer\installer_wizard.bmp")) {
+          Write-Host "Note: installer_wizard.bmp not found (using defaults)" -ForegroundColor Yellow
+        }
+    
+    - name: Build installer with Inno Setup
+      shell: powershell
+      run: |
+        Write-Host "Building installer with Inno Setup..." -ForegroundColor Yellow
+        
+        # 查找 Inno Setup
         $isccPaths = @(
           "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
-          "C:\Program Files\Inno Setup 6\ISCC.exe"
+          "C:\Program Files\Inno Setup 6\ISCC.exe",
+          "D:\Program Files\Inno Setup 6\ISCC.exe",
+          "D:\Program Files (x86)\Inno Setup 6\ISCC.exe"
         )
         
         $iscc = $isccPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
         
-        if ($iscc -and (Test-Path "installer\windows\baal_setup.iss")) {
-          Write-Host "Creating installer with Inno Setup..." -ForegroundColor Green
-          & $iscc /Q "installer\windows\baal_setup.iss"
+        if (-not $iscc) {
+          Write-Host "Inno Setup not found. Attempting to install..." -ForegroundColor Yellow
           
-          if (Test-Path "installer\windows\Output\*.exe") {
-            Write-Host "✓ Installer created successfully" -ForegroundColor Green
+          # 下载 Inno Setup
+          $innoUrl = "https://files.jrsoftware.org/is/6/innosetup-6.2.2.exe"
+          $innoInstaller = "$env:TEMP\innosetup.exe"
+          
+          try {
+            Write-Host "Downloading Inno Setup..." -ForegroundColor Gray
+            Invoke-WebRequest -Uri $innoUrl -OutFile $innoInstaller -UseBasicParsing
+            
+            Write-Host "Installing Inno Setup silently..." -ForegroundColor Gray
+            Start-Process -FilePath $innoInstaller -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-" -Wait
+            
+            # 再次查找
+            $iscc = $isccPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
+            
+            if ($iscc) {
+              Write-Host "✓ Inno Setup installed successfully" -ForegroundColor Green
+            } else {
+              Write-Host "Error: Inno Setup installation failed" -ForegroundColor Red
+              exit 1
+            }
+          } catch {
+            Write-Host "Error downloading/installing Inno Setup: $_" -ForegroundColor Red
+            exit 1
           }
         } else {
-          Write-Host "Inno Setup not found or setup script missing (skipping installer creation)" -ForegroundColor Yellow
+          Write-Host "✓ Found Inno Setup at: $iscc" -ForegroundColor Green
+        }
+        
+        # 检查 ISS 文件
+        $issFile = "installer\baal_installer.iss"
+        if (-not (Test-Path $issFile)) {
+          Write-Host "Error: $issFile not found!" -ForegroundColor Red
+          exit 1
+        }
+        
+        Write-Host "Compiling installer..." -ForegroundColor Yellow
+        
+        # 编译安装包
+        $arguments = @(
+          "/Q",  # Quiet mode
+          "/O`"installer\Output`"",  # Output directory
+          "/F`"WatchCats-Setup`"",  # Output filename
+          "`"$issFile`""
+        )
+        
+        & $iscc $arguments
+        
+        if ($LASTEXITCODE -eq 0) {
+          Write-Host "✓ Installer compiled successfully!" -ForegroundColor Green
+          
+          # 验证输出
+          $installerPath = "installer\Output\WatchCats-Setup.exe"
+          if (Test-Path $installerPath) {
+            $size = [math]::Round((Get-Item $installerPath).Length / 1MB, 2)
+            Write-Host "✓ Created installer: WatchCats-Setup.exe ($size MB)" -ForegroundColor Green
+            
+            # 显示安装包信息
+            Write-Host "" -ForegroundColor Gray
+            Write-Host "Installer Information:" -ForegroundColor Cyan
+            Write-Host "  Path: $installerPath" -ForegroundColor Gray
+            Write-Host "  Size: $size MB" -ForegroundColor Gray
+            Write-Host "  Features:" -ForegroundColor Gray
+            Write-Host "    • Visual C++ Runtime installation" -ForegroundColor Gray
+            Write-Host "    • Data migration from old versions" -ForegroundColor Gray
+            Write-Host "    • Desktop shortcut creation" -ForegroundColor Gray
+            Write-Host "    • Auto-start configuration" -ForegroundColor Gray
+            Write-Host "    • Uninstaller included" -ForegroundColor Gray
+          } else {
+            Write-Host "Warning: Installer file not found after compilation" -ForegroundColor Yellow
+          }
+        } else {
+          Write-Host "Error: Installer compilation failed with exit code $LASTEXITCODE" -ForegroundColor Red
+          exit 1
         }
     
     - name: Package artifacts
@@ -231,18 +372,21 @@ jobs:
         # 创建 artifacts 目录
         New-Item -ItemType Directory -Force -Path artifacts | Out-Null
         
-        # 复制可执行文件
+        # 复制可执行文件（便携版）
         Get-ChildItem -Path dist -Filter "*.exe" | ForEach-Object {
-          Copy-Item -Path $_.FullName -Destination artifacts\
-          Write-Host "  Copied: $($_.Name)" -ForegroundColor Gray
+          Copy-Item -Path $_.FullName -Destination "artifacts\WatchCats-Portable.exe"
+          Write-Host "  Copied portable: WatchCats-Portable.exe" -ForegroundColor Gray
         }
         
         # 复制安装程序（如果存在）
-        if (Test-Path "installer\windows\Output\*.exe") {
-          Get-ChildItem -Path "installer\windows\Output" -Filter "*.exe" | ForEach-Object {
-            Copy-Item -Path $_.FullName -Destination "artifacts\Setup-$($_.Name)"
-            Write-Host "  Copied installer: $($_.Name)" -ForegroundColor Gray
-          }
+        if (Test-Path "installer\Output\WatchCats-Setup.exe") {
+          Copy-Item -Path "installer\Output\WatchCats-Setup.exe" -Destination "artifacts\WatchCats-Setup.exe"
+          Write-Host "  Copied installer: WatchCats-Setup.exe" -ForegroundColor Gray
+          
+          $installerSize = [math]::Round((Get-Item "artifacts\WatchCats-Setup.exe").Length / 1MB, 2)
+          Write-Host "    Installer size: ${installerSize}MB" -ForegroundColor Gray
+        } else {
+          Write-Host "  Warning: Installer not found" -ForegroundColor Yellow
         }
         
         # 创建版本信息文件
@@ -295,28 +439,58 @@ jobs:
         name: Release ${{ github.ref_name }}
         tag_name: ${{ github.ref_name }}
         body: |
-          # Baal Desktop Pet ${{ github.ref_name }}
+          # WatchCats ${{ github.ref_name }}
           
-          ## 📦 Downloads
+          ## 📦 下载选项 Downloads
           
-          - **Windows Installer**: `Setup-BaalDesktopPet.exe` (Recommended)
-          - **Windows Portable**: `BaalDesktopPet-Windows-${{ github.ref_name }}.zip`
+          ### 推荐 (Recommended)
+          - **Windows 安装程序**: `WatchCats-Setup.exe`
+            - 自动安装 Visual C++ 运行库
+            - 自动迁移旧版本数据
+            - 创建桌面快捷方式和开始菜单
+            - 包含卸载程序
           
-          ## 🔧 System Requirements
+          ### 便携版 (Portable)
+          - **Windows 便携版**: `WatchCats-Portable.exe`
+            - 单文件，无需安装
+            - 需要手动安装运行库（如果缺失）
+            - 适合临时使用或测试
           
-          - Windows 10/11
-          - No Python installation required (standalone executable)
+          ### 完整包 (Full Package)
+          - **ZIP 压缩包**: `BaalDesktopPet-Windows-${{ github.ref_name }}.zip`
+            - 包含所有文件和资源
+            - 适合高级用户
           
-          ## 📝 Changelog
+          ## 🔧 系统要求 System Requirements
           
+          - Windows 10/11 (64-bit)
+          - Visual C++ Redistributable 2015-2022（安装程序会自动安装）
+          - 不需要 Python 环境
+          
+          ## ⚙️ 安装说明 Installation
+          
+          1. **推荐方式**：下载并运行 `WatchCats-Setup.exe`
+          2. **便携方式**：直接运行 `WatchCats-Portable.exe`
+          
+          ## 🔄 从旧版本升级 Upgrading
+          
+          安装程序会自动迁移以下数据：
+          - API 密钥配置
+          - 对话历史记录
+          - 日程安排
+          - 监督目标设置
+          
+          ## 📝 更新日志 Changelog
+          
+          查看提交历史了解详细更改。
           See commit history for detailed changes.
           
           ---
-          *Built on self-hosted runner*
+          *Built on self-hosted runner: DNF-DELLWORKSTA*
         files: |
+          artifacts/WatchCats-Setup.exe
+          artifacts/WatchCats-Portable.exe
           artifacts/*.zip
-          artifacts/Setup-*.exe
-          artifacts/*.exe
         fail_on_unmatched_files: false
         generate_release_notes: true
     
