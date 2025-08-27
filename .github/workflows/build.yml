@@ -30,17 +30,75 @@ jobs:
         Write-Host "Directory: $pwd" -ForegroundColor Yellow
         Write-Host "Time: $(Get-Date)" -ForegroundColor Yellow
         
-        # Python 信息
+        # 查找并设置 Python
+        Write-Host ""
+        Write-Host "Searching for Python..." -ForegroundColor Green
+        
+        # 查找 Python 的常见位置
+        $pythonPaths = @(
+          "C:\Python39\python.exe",
+          "C:\Python310\python.exe",
+          "C:\Python311\python.exe",
+          "C:\Python312\python.exe",
+          "C:\Program Files\Python39\python.exe",
+          "C:\Program Files\Python310\python.exe",
+          "C:\Program Files\Python311\python.exe",
+          "C:\Program Files\Python312\python.exe",
+          "$env:LOCALAPPDATA\Programs\Python\Python39\python.exe",
+          "$env:LOCALAPPDATA\Programs\Python\Python310\python.exe",
+          "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe",
+          "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe"
+        )
+        
+        $pythonFound = $false
+        $pythonExe = ""
+        
+        # 先检查 PATH 中的 python
+        $pathPython = Get-Command python -ErrorAction SilentlyContinue
+        if ($pathPython) {
+          $pythonExe = $pathPython.Source
+          Write-Host "Found Python in PATH: $pythonExe" -ForegroundColor Green
+          $pythonFound = $true
+        } else {
+          Write-Host "Python not in PATH, searching common locations..." -ForegroundColor Yellow
+          
+          # 搜索常见位置
+          foreach ($path in $pythonPaths) {
+            if (Test-Path $path) {
+              $pythonExe = $path
+              Write-Host "Found Python at: $pythonExe" -ForegroundColor Green
+              
+              # 将找到的 Python 添加到当前会话的 PATH
+              $pythonDir = Split-Path $pythonExe
+              $env:PATH = "$pythonDir;$env:PATH"
+              Write-Host "Added to PATH: $pythonDir" -ForegroundColor Cyan
+              $pythonFound = $true
+              break
+            }
+          }
+        }
+        
+        if (-not $pythonFound) {
+          Write-Error "Python not found! Please install Python 3.9 or later."
+          Write-Host ""
+          Write-Host "Searched locations:" -ForegroundColor Yellow
+          foreach ($path in $pythonPaths) {
+            Write-Host "  - $path" -ForegroundColor Gray
+          }
+          exit 1
+        }
+        
+        # 显示 Python 信息
         Write-Host ""
         Write-Host "Python information:" -ForegroundColor Green
-        try {
-          $pythonVersion = & python --version 2>&1
-          Write-Host "Version: $pythonVersion" -ForegroundColor Cyan
-          
-          $pythonPath = python -c "import sys; print(sys.executable)" 2>&1
-          Write-Host "Path: $pythonPath" -ForegroundColor Cyan
-        } catch {
-          Write-Host "Error getting Python info: $_" -ForegroundColor Red
+        $version = & $pythonExe --version 2>&1
+        Write-Host "Version: $version" -ForegroundColor Cyan
+        Write-Host "Path: $pythonExe" -ForegroundColor Cyan
+        
+        # 创建 python 别名（如果需要）
+        if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
+          Write-Host "Creating python alias..." -ForegroundColor Yellow
+          Set-Alias -Name python -Value $pythonExe -Scope Global
         }
         
         # 清理旧文件
@@ -58,27 +116,91 @@ jobs:
       run: |
         Write-Host "Installing dependencies directly to user..." -ForegroundColor Green
         
+        # 获取 Python 路径
+        $pythonExe = Get-Command python -ErrorAction SilentlyContinue
+        if ($pythonExe) {
+          $python = "python"
+        } else {
+          # 查找 Python
+          $pythonPaths = @(
+            "C:\Python39\python.exe",
+            "C:\Python310\python.exe",
+            "C:\Python311\python.exe",
+            "C:\Python312\python.exe",
+            "$env:LOCALAPPDATA\Programs\Python\Python39\python.exe",
+            "$env:LOCALAPPDATA\Programs\Python\Python310\python.exe",
+            "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe",
+            "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe"
+          )
+          
+          $python = ""
+          foreach ($path in $pythonPaths) {
+            if (Test-Path $path) {
+              $python = $path
+              Write-Host "Using Python: $python" -ForegroundColor Cyan
+              break
+            }
+          }
+          
+          if (-not $python) {
+            Write-Error "Python not found!"
+            exit 1
+          }
+        }
+        
         # 升级 pip
         Write-Host "Upgrading pip..." -ForegroundColor Yellow
-        python -m pip install --upgrade pip --user --no-warn-script-location
+        & $python -m pip install --upgrade pip --user --no-warn-script-location
         
         # 安装 PyInstaller
         Write-Host "Installing PyInstaller..." -ForegroundColor Yellow
-        python -m pip install "pyinstaller==6.11.1" --user --no-warn-script-location --force-reinstall
+        & $python -m pip install "pyinstaller==6.11.1" --user --no-warn-script-location --force-reinstall
         
         # 安装项目依赖
         Write-Host "Installing requirements..." -ForegroundColor Yellow
-        python -m pip install -r requirements.txt --user --no-warn-script-location
+        & $python -m pip install -r requirements.txt --user --no-warn-script-location
         
         # 显示安装的包
         Write-Host ""
         Write-Host "Key packages:" -ForegroundColor Green
-        python -m pip list | Select-String -Pattern "PyQt6|pyinstaller|langchain|aw-"
+        & $python -m pip list | Select-String -Pattern "PyQt6|pyinstaller|langchain|aw-"
     
     - name: Build with PyInstaller
       shell: powershell
       run: |
         Write-Host "Building executable..." -ForegroundColor Green
+        
+        # 获取 Python 路径
+        $pythonExe = Get-Command python -ErrorAction SilentlyContinue
+        if ($pythonExe) {
+          $python = "python"
+        } else {
+          # 查找 Python
+          $pythonPaths = @(
+            "C:\Python39\python.exe",
+            "C:\Python310\python.exe",
+            "C:\Python311\python.exe",
+            "C:\Python312\python.exe",
+            "$env:LOCALAPPDATA\Programs\Python\Python39\python.exe",
+            "$env:LOCALAPPDATA\Programs\Python\Python310\python.exe",
+            "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe",
+            "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe"
+          )
+          
+          $python = ""
+          foreach ($path in $pythonPaths) {
+            if (Test-Path $path) {
+              $python = $path
+              Write-Host "Using Python: $python" -ForegroundColor Cyan
+              break
+            }
+          }
+          
+          if (-not $python) {
+            Write-Error "Python not found!"
+            exit 1
+          }
+        }
         
         # 确定 spec 文件
         $specFile = if (Test-Path "baal_windows.spec") {
@@ -103,7 +225,7 @@ jobs:
         
         # 运行 PyInstaller
         Write-Host "Running PyInstaller..." -ForegroundColor Cyan
-        python -m PyInstaller --clean --noconfirm $specFile
+        & $python -m PyInstaller --clean --noconfirm $specFile
         
         if ($LASTEXITCODE -ne 0) {
           Write-Error "PyInstaller failed with exit code $LASTEXITCODE"
