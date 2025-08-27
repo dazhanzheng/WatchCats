@@ -78,27 +78,40 @@ jobs:
         $pythonFound = $false
         $pythonExe = ""
         
-        # 先检查 PATH 中的 python
+        # 先检查 PATH 中的 python（排除 WindowsApps 占位符）
         $pathPython = Get-Command python -ErrorAction SilentlyContinue
-        if ($pathPython) {
+        if ($pathPython -and $pathPython.Source -notlike "*WindowsApps*") {
           $pythonExe = $pathPython.Source
           Write-Host "Found Python in PATH: $pythonExe" -ForegroundColor Green
           $pythonFound = $true
         } else {
-          Write-Host "Python not in PATH, searching common locations..." -ForegroundColor Yellow
+          if ($pathPython -and $pathPython.Source -like "*WindowsApps*") {
+            Write-Host "Found Windows Store Python stub (not real Python), searching for actual Python..." -ForegroundColor Yellow
+          } else {
+            Write-Host "Python not in PATH, searching common locations..." -ForegroundColor Yellow
+          }
           
           # 搜索常见位置
           foreach ($path in $pythonPaths) {
             if (Test-Path $path) {
-              $pythonExe = $path
-              Write-Host "Found Python at: $pythonExe" -ForegroundColor Green
-              
-              # 将找到的 Python 添加到当前会话的 PATH
-              $pythonDir = Split-Path $pythonExe
-              $env:PATH = "$pythonDir;$env:PATH"
-              Write-Host "Added to PATH: $pythonDir" -ForegroundColor Cyan
-              $pythonFound = $true
-              break
+              # 验证这是真正的 Python，不是占位符
+              try {
+                $testVersion = & $path --version 2>&1
+                if ($testVersion -match "Python \d+\.\d+") {
+                  $pythonExe = $path
+                  Write-Host "Found Python at: $pythonExe" -ForegroundColor Green
+                  Write-Host "  Version: $testVersion" -ForegroundColor Cyan
+                  
+                  # 将找到的 Python 添加到当前会话的 PATH
+                  $pythonDir = Split-Path $pythonExe
+                  $env:PATH = "$pythonDir;$env:PATH"
+                  Write-Host "  Added to PATH: $pythonDir" -ForegroundColor Cyan
+                  $pythonFound = $true
+                  break
+                }
+              } catch {
+                # 这个 Python 不能执行，继续搜索
+              }
             }
           }
         }
