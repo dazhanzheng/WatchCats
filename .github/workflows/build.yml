@@ -154,11 +154,24 @@ jobs:
       run: |
         Write-Host "Installing dependencies directly to user..." -ForegroundColor Green
         
-        # 获取 Python 路径
-        $pythonExe = Get-Command python -ErrorAction SilentlyContinue
-        if ($pythonExe) {
-          $python = "python"
-        } else {
+        # 获取 Python 路径（排除 WindowsApps 占位符）
+        $pythonCmd = Get-Command python -ErrorAction SilentlyContinue
+        $python = ""
+        
+        if ($pythonCmd -and $pythonCmd.Source -notlike "*WindowsApps*") {
+          # 验证能执行
+          try {
+            $testVer = & python --version 2>&1
+            if ($testVer -match "Python") {
+              $python = "python"
+              Write-Host "Using Python from PATH" -ForegroundColor Green
+            }
+          } catch {}
+        }
+        
+        if (-not $python) {
+          Write-Host "Searching for Python in common locations..." -ForegroundColor Yellow
+          
           # 查找 Python
           $pythonPaths = @(
             "C:\Python39\python.exe",
@@ -166,6 +179,7 @@ jobs:
             "C:\Python311\python.exe",
             "C:\Python312\python.exe",
             "C:\Python313\python.exe",
+            "C:\Program Files\Python313\python.exe",
             "$env:LOCALAPPDATA\Programs\Python\Python39\python.exe",
             "$env:LOCALAPPDATA\Programs\Python\Python310\python.exe",
             "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe",
@@ -173,17 +187,24 @@ jobs:
             "$env:LOCALAPPDATA\Programs\Python\Python313\python.exe"
           )
           
-          $python = ""
           foreach ($path in $pythonPaths) {
             if (Test-Path $path) {
-              $python = $path
-              Write-Host "Using Python: $python" -ForegroundColor Cyan
-              break
+              # 验证这是真正的 Python
+              try {
+                $testVer = & $path --version 2>&1
+                if ($testVer -match "Python") {
+                  $python = $path
+                  Write-Host "Found Python at: $python" -ForegroundColor Green
+                  Write-Host "Version: $testVer" -ForegroundColor Cyan
+                  break
+                }
+              } catch {}
             }
           }
           
           if (-not $python) {
-            Write-Error "Python not found!"
+            Write-Error "No working Python installation found!"
+            Write-Host "Please ensure Python 3.9+ is installed and not the Windows Store version" -ForegroundColor Red
             exit 1
           }
         }
@@ -210,18 +231,30 @@ jobs:
       run: |
         Write-Host "Building executable..." -ForegroundColor Green
         
-        # 获取 Python 路径
-        $pythonExe = Get-Command python -ErrorAction SilentlyContinue
-        if ($pythonExe) {
-          $python = "python"
-        } else {
-          # 查找 Python
+        # 获取 Python 路径（与前面步骤相同的逻辑）
+        $pythonCmd = Get-Command python -ErrorAction SilentlyContinue
+        $python = ""
+        
+        if ($pythonCmd -and $pythonCmd.Source -notlike "*WindowsApps*") {
+          try {
+            $testVer = & python --version 2>&1
+            if ($testVer -match "Python") {
+              $python = "python"
+              Write-Host "Using Python from PATH" -ForegroundColor Green
+            }
+          } catch {}
+        }
+        
+        if (-not $python) {
+          Write-Host "Searching for Python..." -ForegroundColor Yellow
+          
           $pythonPaths = @(
             "C:\Python39\python.exe",
             "C:\Python310\python.exe",
             "C:\Python311\python.exe",
             "C:\Python312\python.exe",
             "C:\Python313\python.exe",
+            "C:\Program Files\Python313\python.exe",
             "$env:LOCALAPPDATA\Programs\Python\Python39\python.exe",
             "$env:LOCALAPPDATA\Programs\Python\Python310\python.exe",
             "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe",
@@ -229,12 +262,16 @@ jobs:
             "$env:LOCALAPPDATA\Programs\Python\Python313\python.exe"
           )
           
-          $python = ""
           foreach ($path in $pythonPaths) {
             if (Test-Path $path) {
-              $python = $path
-              Write-Host "Using Python: $python" -ForegroundColor Cyan
-              break
+              try {
+                $testVer = & $path --version 2>&1
+                if ($testVer -match "Python") {
+                  $python = $path
+                  Write-Host "Using Python: $python" -ForegroundColor Cyan
+                  break
+                }
+              } catch {}
             }
           }
           
