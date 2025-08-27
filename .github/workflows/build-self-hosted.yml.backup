@@ -229,12 +229,11 @@ Name: "{commondesktop}\Baal Desktop Pet"; Filename: "{app}\BaalDesktopPet.exe"
           Remove-Item -Recurse -Force "$env:APPDATA\pyinstaller" -ErrorAction SilentlyContinue
         }
 
-  # 如果你也有 macOS 自托管 runner
-  build-macos-self-hosted:
-    name: Build macOS (if self-hosted available)
-    # 修改这里以使用你的 macOS runner
-    # runs-on: [self-hosted, macos, YOUR-MAC-NAME]
-    runs-on: macos-latest  # 或者使用 GitHub 提供的 runner
+  # macOS 构建 - 只在需要时启用
+  # 如果你没有 macOS self-hosted runner，可以注释掉整个 job
+  # build-macos-self-hosted:
+  #   name: Build macOS on Self-Hosted Runner
+  #   runs-on: [self-hosted, macOS]  # 需要有 macOS 的 self-hosted runner
     if: github.event_name != 'workflow_dispatch' || github.event.inputs.build_type == 'macos' || github.event.inputs.build_type == 'both'
     
     steps:
