@@ -50,6 +50,7 @@ class SupervisionMode(QObject):
         self.short_term_goals = []  # 短期目标列表
         self.check_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()  # 用于优雅停止线程
+        self._goals_lock = threading.RLock()  # 用于保护目标数据的读写锁
         # 检查间隔（秒）- 可以通过环境变量调整，便于测试
         import os
         # 使用常量中的默认值，可通过环境变量覆盖
@@ -95,8 +96,9 @@ class SupervisionMode(QObject):
             if config_path.exists():
                 with open(config_path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                    self.long_term_goal = data.get('long_term_goal', '')
-                    self.short_term_goals = data.get('short_term_goals', [])
+                    with self._goals_lock:
+                        self.long_term_goal = data.get('long_term_goal', '')
+                        self.short_term_goals = data.get('short_term_goals', [])
                     # 兼容旧版本数据
                     if 'goal' in data and not self.long_term_goal:
                         self.long_term_goal = data['goal']
@@ -111,11 +113,12 @@ class SupervisionMode(QObject):
         """保存监督设置"""
         try:
             config_path = self.config_manager.config_dir / 'supervision.json'
-            data = {
-                'long_term_goal': self.long_term_goal,
-                'short_term_goals': self.short_term_goals,
-                'updated_at': datetime.now().isoformat()
-            }
+            with self._goals_lock:
+                data = {
+                    'long_term_goal': self.long_term_goal,
+                    'short_term_goals': self.short_term_goals,
+                    'updated_at': datetime.now().isoformat()
+                }
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
             logger.debug("监督设置已保存")
@@ -140,10 +143,11 @@ class SupervisionMode(QObject):
                 return False  # 返回False表示启动失败
         
         # 如果提供了新的目标，更新它们
-        if long_term_goal is not None:
-            self.long_term_goal = long_term_goal
-        if short_term_goals is not None:
-            self.short_term_goals = short_term_goals
+        with self._goals_lock:
+            if long_term_goal is not None:
+                self.long_term_goal = long_term_goal
+            if short_term_goals is not None:
+                self.short_term_goals = short_term_goals
         self.is_active = True
         self.last_check_time = datetime.now()
         
@@ -391,11 +395,38 @@ class SupervisionMode(QObject):
                 except:
                     stats_last_24h = stats_24h  # 如果失败，使用今日数据作为备份
                 
+                # 获取分类统计和生产力分析
+                category_stats = {}
+                productivity_analysis = {}
+                try:
+                    if self.is_active and not self._stop_event.is_set():
+                        # 获取2小时的分类统计
+                        cat_stats = sp.get_category_stats(2)
+                        if cat_stats and cat_stats.get('categories'):
+                            top_categories = cat_stats['categories'][:5]  # 前5个分类
+                            category_summary = "主要活动分类: " + ", ".join([
+                                f"{cat['name']}({cat['duration_str']})"
+                                for cat in top_categories
+                            ])
+                            category_stats['summary'] = category_summary
+                            category_stats['details'] = cat_stats
+                            logger.debug(f"✓ 分类统计获取成功")
+                        
+                        # 获取生产力分析
+                        prod_stats = sp.get_productive_vs_unproductive_stats(2)
+                        if prod_stats:
+                            productivity_analysis = prod_stats
+                            logger.debug(f"✓ 生产力分析获取成功: {prod_stats['productive_percentage']:.1f}%生产性活动")
+                except Exception as e:
+                    logger.warning(f"获取分类统计失败: {e}")
+                
                 result = {
                     'stats_5m': stats_5m,
                     'stats_2h': stats_2h,
                     'stats_today': stats_24h,  # 今日数据（从凌晨4点）
                     'stats_24h': stats_last_24h,  # 过去24小时数据
+                    'category_stats': category_stats,  # 分类统计
+                    'productivity_analysis': productivity_analysis,  # 生产力分析
                     'timestamp': datetime.now().isoformat()
                 }
                 
@@ -487,65 +518,93 @@ class SupervisionMode(QObject):
             
             # 数据准备完成
             
+            # 安全地读取目标数据（创建快照，避免在评估过程中被修改）
+            with self._goals_lock:
+                current_long_term_goal = self.long_term_goal
+                current_short_term_goals = self.short_term_goals.copy()  # 复制列表避免修改
+            
+            # 生成随机元素增加多样性
+            import random
+            time_of_day = datetime.now().hour
+            time_period = "深夜" if time_of_day < 6 else "早晨" if time_of_day < 12 else "下午" if time_of_day < 18 else "晚上"
+            
+            # 随机选择一种对话风格
+            dialog_styles = [
+                "直接对话",  # 直接和用户说话
+                "自言自语",  # 巴利自言自语，假装用户听不到
+                "内心独白",  # 巴利的内心想法
+                "旁白叙述",  # 像旁白一样描述状况
+                "反问质疑",  # 用反问句表达
+            ]
+            chosen_style = random.choice(dialog_styles)
+            
             # 构建增强的评估提示
-            prompt = f"""你是巴利（Baal），一个监督用户生产力的桌面宠物助手。
-当前人设模式：{current_persona['name']}
-人设特点：{current_persona['description']}
+            prompt = f"""你是巴利（Baal），一只监督用户生产力的黑猫恶魔宠物。现在是{time_period}。
+当前人设：{current_persona['name']} - {current_persona['description']}
 
-用户设定的目标：
-长期目标：{self.long_term_goal if self.long_term_goal else '未设定'}
-短期目标：{', '.join(self.short_term_goals) if self.short_term_goals else '未设定'}
+用户目标：
+长期：{current_long_term_goal if current_long_term_goal else '无'}
+今日任务：{current_short_term_goals if current_short_term_goals else ['无']}
 
-用户的电脑使用情况（多时段综合分析）：
+活动数据：
+5分钟：{stats_5m}
+2小时：{stats_2h}
+24小时：{stats_24h}
 
-【过去5分钟 - 即时行为】
-{stats_5m}
+分类分析：
+{stats.get('category_stats', {}).get('summary', '暂无分类数据')}
 
-【过去2小时 - 短期趋势】
-{stats_2h}
+生产力评估：
+{stats.get('productivity_analysis', {}).get('analysis', '暂无生产力数据')}
+生产性活动占比：{stats.get('productivity_analysis', {}).get('productive_percentage', 0):.1f}%
 
-【过去24小时 - 整体表现】
-{stats_24h}
+【创作指南】
+你需要像一个真实的、有个性的宠物那样说话，而不是机器人。这次使用"{chosen_style}"风格。
 
-请综合分析以上三个时段的数据：
-1. 5分钟数据反映用户当前正在做什么
-2. 2小时数据显示短期行为模式
-3. 24小时数据展示整体生产力状况
+风格示例：
+- 直接对话："喂！你在干什么呢？飞书聊了2小时了，工作呢？"
+- 自言自语："唉，这家伙又在摸鱼了...算了，我只是只猫，管不了那么多..."
+- 内心独白："（看着屏幕上的飞书）...我就知道会这样，每次都是这样..."
+- 旁白叙述："于是，在这个{time_period}，某人又一次背叛了自己的承诺..."
+- 反问质疑："所以你觉得刷2小时飞书能写完代码？嗯？"
 
-【重要】分析时请注意数据中的绝对值（如"2小时30分"）和相对值（如"占比70%"），两者都要在提醒中体现。
+【重要】生成提醒时：
+1. 不要使用"您"这种敬语，根据人设用"你"或其他称呼
+2. 可以用省略号、感叹号、问号来表达情绪
+3. 可以用一些口语化表达，如"啧啧"、"哎呀"、"算了吧"、"得了吧"
+4. 严厉主人可以用命令句："立刻关掉飞书！"、"马上去工作！"
+5. 毒舌管家可以阴阳怪气："哦，原来飞书是新的IDE啊～"
+6. 温柔伴侣可以委婉关心："要不要休息一下眼睛，然后回到工作上呢？"
+7. 可以提到具体时间和应用，但要自然融入对话
+8. 偶尔可以不提具体数字，用更生动的描述
+9. 可以根据时间段调整语气（深夜更温柔、早晨更有活力等）
+10. 表情标记：<#1>开心 <#2>得意 <#3>无语 <#4>鄙视 <#5>平静 <#6>生气 <#7>暴怒
 
-根据分析结果，按照以下JSON格式回答：
+【多样化技巧】
+- 可以从不同角度切入（健康、效率、承诺、时间价值等）
+- 可以用比喻（"像冰淇淋在太阳下融化"、"时间像沙子从指缝溜走"）
+- 可以引用之前的表现（"昨天你还说要改变的"）
+- 可以预测后果（"这样下去deadline要来不及了"）
+- 可以用幽默化解（但要符合人设）
+
+返回JSON格式：
 {{
-    "should_remind": true或false（是否需要提醒用户）,
-    "deviation_level": "严重"或"中度"或"轻微"或"无"（偏离程度）,
-    "reminder_message": "根据人设特点的提醒内容，使用中文",
-    "analysis": "简短的分析说明，包含对三个时段数据的综合判断",
+    "should_remind": true/false,
+    "deviation_level": "严重/中度/轻微/无",
+    "reminder_message": "你的提醒内容（自然、口语化、有个性）",
+    "analysis": "内部分析（不显示给用户）",
     "time_period_analysis": {{
-        "5m": "5分钟行为分析",
-        "2h": "2小时趋势分析", 
-        "24h": "24小时整体分析"
+        "5m": "简短分析",
+        "2h": "简短分析",
+        "24h": "简短分析"
     }}
 }}
 
-生成reminder_message的要求：
-1. 必须符合当前人设的语言风格和性格特点
-2. 要自然、多样化，避免格式化的表达
-3. 同时提及具体时长（绝对值）和占比（相对值），如"你已经在飞书上浪费了2小时（占今天的80%）"
-4. 可以引用不同时段的对比，如"虽然过去5分钟在工作，但2小时内你有1.5小时在摸鱼"
-5. 根据偏离程度调整语气强度：
-   - 严重：强烈批评/命令（严厉主人）、尖锐讽刺（毒舌管家）、担忧焦虑（温柔伴侣）
-   - 中度：警告提醒（严厉主人）、嘲讽暗示（毒舌管家）、温和提醒（温柔伴侣）
-   - 轻微：冷淡提示（严厉主人）、轻微调侃（毒舌管家）、鼓励支持（温柔伴侣）
-6. 每次的表达方式要不同，可以用不同的角度、比喻、语气变化
-7. 可以具体指出问题应用和建议应用，如"关掉飞书，打开VS Code"
-8. 表情标记要与情绪匹配：<#1>开心 <#2>得意 <#3>无语 <#4>鄙视 <#5>平静 <#6>生气 <#7>暴怒
-
-决策规则：
-1. 如果5分钟数据显示用户正在做与目标相关的事情，即使2小时或24小时有偏离，也不要立即提醒
-2. 如果5分钟和2小时都显示偏离，应该提醒
-3. 如果只是24小时整体偏离但当前正在改善，给予鼓励而非批评
-4. 提醒内容必须符合当前人设的语言风格
-5. 避免过于频繁的提醒，只在明显偏离时才提醒
+判断标准：
+- 当前专注且目标相关→不提醒
+- 短期明显偏离→提醒
+- 仅历史偏离但改善中→鼓励
+- 避免5分钟内重复提醒
 """
             
             # 发送评估请求
@@ -694,16 +753,19 @@ class SupervisionMode(QObject):
     
     def get_status(self) -> Dict[str, Any]:
         """获取监督模式状态"""
-        return {
-            'is_active': self.is_active,
-            'long_term_goal': self.long_term_goal,
-            'short_term_goals': self.short_term_goals,
-            'last_check': self.last_check_time.isoformat() if self.last_check_time else None
-        }
+        with self._goals_lock:
+            return {
+                'is_active': self.is_active,
+                'long_term_goal': self.long_term_goal,
+                'short_term_goals': self.short_term_goals.copy(),  # 返回副本
+                'last_check': self.last_check_time.isoformat() if self.last_check_time else None
+            }
     
     def update_goals(self, long_term_goal: str, short_term_goals: list):
-        """更新监督目标（不重启监督）"""
-        self.long_term_goal = long_term_goal
-        self.short_term_goals = short_term_goals
-        self._save_supervision_settings()
-        print(f"监督目标已更新: {long_term_goal}")
+        """更新监督目标（可在监督运行时使用）"""
+        with self._goals_lock:
+            self.long_term_goal = long_term_goal
+            self.short_term_goals = short_term_goals
+            self._save_supervision_settings()
+            logger.info(f"监督目标已更新 - 长期目标: {long_term_goal[:50] if len(long_term_goal) > 50 else long_term_goal}...")
+            logger.debug(f"短期目标: {short_term_goals}")

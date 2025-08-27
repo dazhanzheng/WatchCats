@@ -1,0 +1,245 @@
+name: Build Baal Desktop Pet
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:  # 允许手动触发
+
+env:
+  PYTHON_VERSION: '3.9'
+
+jobs:
+  build-windows:
+    name: Build Windows Executable
+    runs-on: [self-hosted, windows, DNF-DELLWORKSTA]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0  # 获取完整历史，用于版本信息
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+    
+    - name: Create virtual environment
+      run: |
+        python -m venv venv
+        echo "Virtual environment created"
+    
+    - name: Install dependencies
+      run: |
+        .\venv\Scripts\activate
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        echo "Dependencies installed"
+    
+    - name: Run tests (optional)
+      continue-on-error: true  # 测试失败不阻止构建
+      run: |
+        .\venv\Scripts\activate
+        python -m pytest tests/ || true
+    
+    - name: Build with PyInstaller
+      run: |
+        .\venv\Scripts\activate
+        pyinstaller --clean --noconfirm baal_windows.spec
+        echo "Build completed"
+    
+    - name: Create installer with Inno Setup
+      run: |
+        # 假设 Inno Setup 已安装在 runner 上
+        # 修改路径以匹配实际安装位置
+        & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /Q installer\windows\baal_setup.iss
+      continue-on-error: true  # 如果没有 Inno Setup 也不失败
+    
+    - name: Package build artifacts
+      run: |
+        # 创建发布目录
+        New-Item -ItemType Directory -Force -Path release\windows
+        
+        # 复制构建产物
+        Copy-Item -Path dist\* -Destination release\windows\ -Recurse
+        
+        # 创建 ZIP 包
+        Compress-Archive -Path dist\BaalDesktopPet.exe -DestinationPath release\windows\BaalDesktopPet-Windows.zip
+        
+        # 如果有安装程序，也复制过去
+        if (Test-Path "installer\windows\Output\*.exe") {
+          Copy-Item -Path installer\windows\Output\*.exe -Destination release\windows\
+        }
+    
+    - name: Upload Windows artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: windows-build
+        path: release/windows/
+        retention-days: 7
+    
+    - name: Clean up
+      if: always()
+      run: |
+        # 清理构建目录，为下次构建做准备
+        Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
+        Remove-Item -Recurse -Force venv -ErrorAction SilentlyContinue
+
+  build-macos:
+    name: Build macOS Application
+    # 如果你也有自托管的 macOS runner，可以使用
+    # runs-on: [self-hosted, macos, YOUR-MAC-RUNNER]
+    # 否则使用 GitHub 提供的 runner
+    runs-on: macos-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m venv venv
+        source venv/bin/activate
+        pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Create app icon
+      run: |
+        # 生成 macOS 图标
+        ./scripts/create_baal_icons.sh || true
+    
+    - name: Build with PyInstaller
+      run: |
+        source venv/bin/activate
+        pyinstaller --clean --noconfirm baal_macos.spec
+    
+    - name: Create DMG
+      run: |
+        # 安装 dmgbuild
+        source venv/bin/activate
+        pip install dmgbuild
+        
+        # 创建 DMG
+        dmgbuild -s scripts/dmgbuild-settings.py -D app=dist/BaalDesktopPet.app "Baal Desktop Pet" dist/BaalDesktopPet.dmg
+      continue-on-error: true
+    
+    - name: Code signing (optional)
+      if: env.MACOS_CERTIFICATE != ''
+      env:
+        MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+        MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+      run: |
+        # 代码签名逻辑
+        echo "Code signing not implemented yet"
+      continue-on-error: true
+    
+    - name: Package macOS artifacts
+      run: |
+        mkdir -p release/macos
+        cp -r dist/*.app release/macos/
+        [ -f dist/*.dmg ] && cp dist/*.dmg release/macos/
+        
+        # 创建 ZIP 包
+        cd dist
+        zip -r ../release/macos/BaalDesktopPet-macOS.zip BaalDesktopPet.app
+        cd ..
+    
+    - name: Upload macOS artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: macos-build
+        path: release/macos/
+        retention-days: 7
+
+  create-release:
+    name: Create Release
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+      with:
+        path: artifacts
+    
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref_name }}
+        release_name: Release ${{ github.ref_name }}
+        body: |
+          # Baal Desktop Pet ${{ github.ref_name }}
+          
+          ## 下载
+          - **Windows**: BaalDesktopPet-Windows.zip
+          - **macOS**: BaalDesktopPet-macOS.zip
+          
+          ## 更新内容
+          请查看 [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md)
+          
+        draft: true  # 创建草稿，手动发布
+        prerelease: false
+    
+    - name: Upload Windows Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: artifacts/windows-build/BaalDesktopPet-Windows.zip
+        asset_name: BaalDesktopPet-Windows-${{ github.ref_name }}.zip
+        asset_content_type: application/zip
+    
+    - name: Upload macOS Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: artifacts/macos-build/BaalDesktopPet-macOS.zip
+        asset_name: BaalDesktopPet-macOS-${{ github.ref_name }}.zip
+        asset_content_type: application/zip
+    
+    - name: Upload Windows Installer (if exists)
+      if: hashFiles('artifacts/windows-build/*.exe') != ''
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: artifacts/windows-build/BaalDesktopPetSetup.exe
+        asset_name: BaalDesktopPet-Setup-${{ github.ref_name }}.exe
+        asset_content_type: application/octet-stream
+      continue-on-error: true
+    
+    - name: Upload macOS DMG (if exists)
+      if: hashFiles('artifacts/macos-build/*.dmg') != ''
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: artifacts/macos-build/BaalDesktopPet.dmg
+        asset_name: BaalDesktopPet-${{ github.ref_name }}.dmg
+        asset_content_type: application/octet-stream
+      continue-on-error: true

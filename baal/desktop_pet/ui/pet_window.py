@@ -523,6 +523,10 @@ class PetWindow(QWidget):
         settings_action = tray_menu.addAction("设置")
         settings_action.triggered.connect(self._show_settings)
         
+        # 分类管理
+        category_action = tray_menu.addAction("分类管理")
+        category_action.triggered.connect(self._show_category_manager)
+        
         # 开发者模式（可通过配置控制显示）
         config = self.config_manager.get_config()
         show_developer_mode = config.get('show_developer_mode', True)  # 默认显示
@@ -992,6 +996,33 @@ class PetWindow(QWidget):
             self.chat_bubble.hide_summary_hint()
             self.logger.debug("Summary hint hidden")
     
+    def _show_category_manager(self):
+        """显示分类管理对话框"""
+        try:
+            from .category_dialog import CategoryDialog
+            
+            dialog = CategoryDialog(self)
+            
+            # 连接分类更新信号
+            dialog.categories_updated.connect(self._on_categories_updated)
+            
+            dialog.exec()
+        except Exception as e:
+            self.logger.error(f"显示分类管理对话框失败: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _on_categories_updated(self):
+        """分类规则更新时的回调"""
+        self.logger.info("应用分类规则已更新")
+        # 通知监督模式重新加载分类
+        if hasattr(self, 'supervision_mode'):
+            try:
+                # 监督模式可以在下次评估时自动使用新的分类
+                self.logger.info("分类规则将在下次监督评估时生效")
+            except Exception as e:
+                self.logger.error(f"更新监督模式分类失败: {e}")
+    
     def _show_developer_console(self):
         """显示开发者控制台"""
         try:
@@ -1457,9 +1488,17 @@ class PetWindow(QWidget):
         menu = QMenu(self)
         
         # 监督模式
-        supervision_text = "停止监督" if self.supervision_mode.is_active else "监督模式"
-        supervision_action = menu.addAction(supervision_text)
-        supervision_action.triggered.connect(self._toggle_supervision_mode)
+        if self.supervision_mode.is_active:
+            # 监督模式正在运行时，显示停止和编辑选项
+            stop_supervision_action = menu.addAction("停止监督")
+            stop_supervision_action.triggered.connect(self._toggle_supervision_mode)
+            
+            edit_goals_action = menu.addAction("编辑监督目标")
+            edit_goals_action.triggered.connect(self._show_supervision_dialog)
+        else:
+            # 监督模式未运行时，只显示启动选项
+            supervision_action = menu.addAction("监督模式")
+            supervision_action.triggered.connect(self._toggle_supervision_mode)
         
         menu.addSeparator()
         
@@ -1591,7 +1630,8 @@ class PetWindow(QWidget):
         dialog = SupervisionDialog(
             self,
             current_goal=self.supervision_mode.long_term_goal,
-            current_tasks=self.supervision_mode.short_term_goals
+            current_tasks=self.supervision_mode.short_term_goals,
+            is_supervision_active=self.supervision_mode.is_active
         )
         dialog.supervision_started.connect(self._start_supervision)
         dialog.exec()
@@ -1616,17 +1656,27 @@ class PetWindow(QWidget):
             dialog = SupervisionDialog(
                 self,
                 current_goal=self.supervision_mode.long_term_goal,
-                current_tasks=self.supervision_mode.short_term_goals
+                current_tasks=self.supervision_mode.short_term_goals,
+                is_supervision_active=self.supervision_mode.is_active
             )
             dialog.supervision_started.connect(self._start_supervision)
             dialog.exec()
     
     def _start_supervision(self, long_term_goal: str, short_term_goals: list):
-        """启动监督模式"""
+        """启动或更新监督模式"""
         # 保存目标和任务，以便配置完成后使用
         self._pending_supervision_goal = long_term_goal
         self._pending_supervision_tasks = short_term_goals
         
+        # 如果监督模式已经在运行，只更新目标
+        if self.supervision_mode.is_active:
+            self.supervision_mode.update_goals(long_term_goal, short_term_goals)
+            self.chat_bubble.show_message("监督目标已更新！")
+            # 启动30秒自动隐藏计时器
+            self._start_bubble_auto_hide_timer(30000)
+            return
+        
+        # 启动新的监督模式
         success = self.supervision_mode.start_supervision(long_term_goal, short_term_goals)
         if success:
             response = PresetResponseManager.get_response(
@@ -1805,6 +1855,17 @@ class PetWindow(QWidget):
         duration = 15000 if deviation_level == '严重' else 10000
         
         self.chat_bubble.show_message(message, duration=duration)
+        
+        # 将监督提醒加入到聊天记录中
+        # 监督提醒作为AI消息记录
+        if hasattr(self, 'llm_assistant') and self.llm_assistant:
+            try:
+                from langchain_core.messages import AIMessage
+                supervision_msg = AIMessage(content=message)
+                self.llm_assistant.conversation_history.append(supervision_msg)
+                logger.info(f"监督提醒已加入聊天记录: {message[:50]}...")
+            except Exception as e:
+                logger.warning(f"无法将监督提醒加入聊天记录: {e}")
     
     def showEvent(self, event):
         """显示事件"""

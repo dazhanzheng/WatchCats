@@ -18,8 +18,10 @@ from aw_transform import (
     sum_durations,
     limit_events,
     filter_keyvals,
-    filter_period_intersect
+    filter_period_intersect,
+    categorize  # 添加分类功能
 )
+from aw_transform.classify import Rule
 
 from ..desktop_pet.core.logger_config import get_logger, log_performance
 
@@ -29,7 +31,63 @@ logger = logging.getLogger(__name__)
 class StatsProcessor:
     """处理 ActivityWatch 统计数据的主类"""
     
-    def __init__(self, client_name: str = None, testing: bool = False):
+    # 默认的应用分类规则
+    # 注意：Rule 的正则表达式应该直接使用 'regex' 键，不需要嵌套在 'app' 或 'title' 中
+    DEFAULT_CATEGORIES = [
+        # 开发工具 - 匹配应用名
+        (["工作", "编程开发"], Rule({"regex": r"(?i)(code|vscode|visual studio|pycharm|intellij|eclipse|atom|sublime|vim|neovim|emacs|xcode|android studio)"})),
+        # 开发工具 - 匹配标题中的代码文件
+        (["工作", "编程开发"], Rule({"regex": r"(?i)\.(py|js|java|cpp|c|h|go|rs|tsx?|jsx?|vue|swift|kt|rb|php|cs)(\s|$)"})),
+        # 开发工具 - 匹配标题中的开发网站
+        (["工作", "编程开发"], Rule({"regex": r"(?i)(github|gitlab|bitbucket|stackoverflow|localhost|127\.0\.0\.1|0\.0\.0\.0)"})),
+        
+        # 终端和命令行
+        (["工作", "命令行"], Rule({"regex": r"(?i)(terminal|iterm|konsole|cmd|powershell|bash|zsh|fish|终端|命令行)"})),
+        
+        # 文档和笔记
+        (["工作", "文档处理"], Rule({"regex": r"(?i)(word|excel|powerpoint|wps|libreoffice|pages|numbers|keynote|google docs|google sheets)"})),
+        (["工作", "笔记"], Rule({"regex": r"(?i)(notion|obsidian|roam|evernote|onenote|bear|typora|joplin|语雀|印象笔记)"})),
+        
+        # 设计工具
+        (["工作", "设计"], Rule({"regex": r"(?i)(photoshop|illustrator|figma|sketch|adobe|affinity|canva|blender|maya|c4d)"})),
+        
+        # 通讯工具
+        (["通讯", "即时消息"], Rule({"regex": r"(?i)(slack|teams|discord|telegram|whatsapp|微信|wechat|qq|钉钉|dingtalk|飞书|feishu|lark)"})),
+        (["通讯", "邮件"], Rule({"regex": r"(?i)(mail|outlook|thunderbird|gmail|邮件|邮箱)"})),
+        (["通讯", "会议"], Rule({"regex": r"(?i)(zoom|meeting|会议|腾讯会议|钉钉会议|飞书会议|teams|meet|webex)"})),
+        
+        # 浏览器分类 - 需要同时检查应用和标题
+        # 工作相关网站
+        (["浏览器", "工作相关"], Rule({"regex": r"(?i)(stackoverflow|github|gitlab|docs|documentation|api|tutorial|guide|jira|confluence|jenkins|aws|azure|gcp|docker)"})),
+        # 学习网站
+        (["浏览器", "学习"], Rule({"regex": r"(?i)(coursera|udemy|edx|khan|学习|教程|course|lecture|tutorial|慕课|网易公开课|极客时间)"})),
+        # 娱乐网站
+        (["浏览器", "娱乐"], Rule({"regex": r"(?i)(youtube|netflix|bilibili|抖音|douyin|twitch|spotify|网易云|酷狗|qq音乐|b站|哔哩哔哩)"})),
+        # 社交媒体
+        (["浏览器", "社交媒体"], Rule({"regex": r"(?i)(twitter|facebook|instagram|reddit|知乎|微博|小红书|linkedin|豆瓣)"})),
+        # 购物网站
+        (["浏览器", "购物"], Rule({"regex": r"(?i)(淘宝|京东|amazon|ebay|拼多多|天猫|shopping|shop|store|商城|购物)"})),
+        # 通用浏览器（作为后备）
+        (["浏览器", "其他"], Rule({"regex": r"(?i)(chrome|safari|firefox|edge|brave|opera|浏览器|browser)"})),
+        
+        # 娱乐应用
+        (["娱乐", "游戏"], Rule({"regex": r"(?i)(steam|epic|origin|battle\.net|游戏|game|minecraft|league|dota|csgo|valorant|overwatch|原神|王者荣耀)"})),
+        (["娱乐", "视频"], Rule({"regex": r"(?i)(爱奇艺|腾讯视频|优酷|netflix|youtube|bilibili|vlc|mpv|quicktime|potplayer|影音|播放器)"})),
+        (["娱乐", "音乐"], Rule({"regex": r"(?i)(spotify|apple music|网易云音乐|qq音乐|酷狗|酷我|music|音乐|xiami|虾米)"})),
+        
+        # 系统工具
+        (["系统", "文件管理"], Rule({"regex": r"(?i)(finder|explorer|nautilus|dolphin|访达|文件管理|file manager|资源管理器)"})),
+        (["系统", "系统设置"], Rule({"regex": r"(?i)(系统偏好设置|system preferences|settings|控制面板|control panel|设置)"})),
+        
+        # AI 助手
+        (["AI工具"], Rule({"regex": r"(?i)(chatgpt|claude|copilot|cursor|bard|文心一言|通义千问|gemini|poe|perplexity)"})),
+        (["AI工具"], Rule({"regex": r"(?i)(openai|anthropic|midjourney|stable diffusion|dall-e)"})),
+        
+        # macOS 特定应用
+        (["系统", "macOS工具"], Rule({"regex": r"(?i)(preview|预览|活动监视器|activity monitor|磁盘工具|disk utility)"})),
+    ]
+    
+    def __init__(self, client_name: str = None, testing: bool = False, custom_categories: List[Tuple] = None, use_user_categories: bool = True):
         # 生成唯一的客户端名称以避免冲突
         if client_name is None:
             import random
@@ -40,8 +98,37 @@ class StatsProcessor:
         Args:
             client_name: 客户端名称
             testing: 是否使用测试模式
+            custom_categories: 自定义分类规则（可选），格式同 DEFAULT_CATEGORIES
+            use_user_categories: 是否使用用户自定义分类（默认True）
         """
+        # 先初始化logger
         self.logger = get_logger('baal.aw_stats.stats_processor')
+        
+        # 设置分类规则
+        if custom_categories:
+            self.categories = custom_categories
+            self.productivity_map = {}
+        elif use_user_categories:
+            # 尝试加载用户自定义分类
+            try:
+                from ..desktop_pet.core.category_manager import CategoryManager
+                category_manager = CategoryManager()
+                user_rules = category_manager.get_aw_transform_rules()
+                
+                # 合并用户规则和默认规则
+                # 用户规则优先（放在前面，先匹配）
+                self.categories = user_rules + self.DEFAULT_CATEGORIES
+                self.logger.info(f"加载了 {len(user_rules)} 个用户分类规则")
+                
+                # 保存生产力分类映射
+                self.productivity_map = category_manager.get_productivity_classification()
+            except Exception as e:
+                self.logger.warning(f"加载用户分类失败，使用默认分类: {e}")
+                self.categories = self.DEFAULT_CATEGORIES
+                self.productivity_map = {}
+        else:
+            self.categories = self.DEFAULT_CATEGORIES
+            self.productivity_map = {}
         self.logger.info(f"Initializing StatsProcessor (client_name={client_name}, testing={testing})")
         
         try:
@@ -202,6 +289,27 @@ class StatsProcessor:
             logger.error(f"获取事件失败: {e}")
             return []
             
+    def _categorize_events(self, events: List[Event]) -> List[Event]:
+        """
+        对事件进行分类
+        
+        Args:
+            events: 事件列表
+            
+        Returns:
+            带分类信息的事件列表
+        """
+        if not events:
+            return events
+            
+        try:
+            # 使用分类规则对事件进行分类
+            categorized = categorize(events, self.categories)
+            return categorized
+        except Exception as e:
+            self.logger.warning(f"分类失败: {e}，返回原始事件")
+            return events
+    
     def _normalize_app_name(self, app_name: str) -> str:
         """
         标准化应用名称，处理特殊应用
@@ -237,7 +345,8 @@ class StatsProcessor:
     def _process_events_to_stats(
         self, 
         events: List[Event], 
-        top_n: int = 20
+        top_n: int = 20,
+        include_categories: bool = True
     ) -> Dict[str, Any]:
         """
         处理事件列表生成统计数据
@@ -245,6 +354,7 @@ class StatsProcessor:
         Args:
             events: 事件列表
             top_n: 返回前N个活跃事件
+            include_categories: 是否包含分类信息
             
         Returns:
             包含统计信息的字典
@@ -253,7 +363,8 @@ class StatsProcessor:
             return {
                 "total_duration": timedelta(0),
                 "event_count": 0,
-                "top_apps": []
+                "top_apps": [],
+                "category_stats": []
             }
             
         # 按应用程序合并事件，但先标准化应用名称
@@ -295,27 +406,55 @@ class StatsProcessor:
                 "duration_str": self._format_duration(duration),
                 "percentage": round(percentage, 2)
             })
+        
+        # 如果需要分类信息，对事件进行分类
+        category_stats = []
+        if include_categories:
+            # 对原始事件进行分类
+            categorized_events = self._categorize_events(events)
+            
+            # 统计每个分类的时间
+            category_durations = defaultdict(timedelta)
+            for event in categorized_events:
+                category = event.data.get("$category", ["未分类"])
+                category_str = " > ".join(category)  # 将层级分类转换为字符串
+                category_durations[category_str] += event.duration
+            
+            # 按时长排序分类
+            sorted_categories = sorted(category_durations.items(), key=lambda x: x[1], reverse=True)
+            
+            # 生成分类统计
+            for category_name, duration in sorted_categories[:10]:  # 只取前10个分类
+                percentage = (duration.total_seconds() / total_duration.total_seconds() * 100) if total_duration.total_seconds() > 0 else 0
+                category_stats.append({
+                    "category": category_name,
+                    "duration": duration,
+                    "duration_str": self._format_duration(duration),
+                    "percentage": round(percentage, 2)
+                })
             
         return {
             "total_duration": total_duration,
             "total_duration_str": self._format_duration(total_duration),
             "event_count": len(events),
-            "top_apps": top_apps
+            "top_apps": top_apps,
+            "category_stats": category_stats
         }
         
-    def get_aggregated_stats(self, days: int) -> str:
+    def get_aggregated_stats(self, days: int, include_categories: bool = True) -> str:
         """
         获取聚合统计数据（7日或1日）
         
         Args:
             days: 天数（7或1）
+            include_categories: 是否包含分类统计
             
         Returns:
             自然语言格式的统计数据
         """
         hours = days * 24
         events = self._get_events_for_period(hours)
-        stats = self._process_events_to_stats(events, top_n=20)
+        stats = self._process_events_to_stats(events, top_n=20, include_categories=include_categories)
         
         # 生成自然语言描述
         current_time = datetime.now().strftime("%Y年%m月%d日 %H:%M:%S")
@@ -331,7 +470,7 @@ class StatsProcessor:
             
         app_list = "\n".join(app_descriptions)
         
-        return (
+        result = (
             f"当前时间是{current_time}，"
             f"近{days}日统计数据：\n"
             f"总统计活跃时长{stats['total_duration_str']}，"
@@ -339,12 +478,25 @@ class StatsProcessor:
             f"其中前{len(stats['top_apps'])}个活跃的应用是：\n{app_list}"
         )
         
-    def get_detailed_stats(self, hours: float) -> str:
+        # 如果有分类统计，添加分类信息
+        if include_categories and stats.get("category_stats"):
+            category_descriptions = []
+            for i, cat_info in enumerate(stats["category_stats"][:5], 1):  # 只显示前5个分类
+                cat_desc = f"{i}. {cat_info['category']}（{cat_info['duration_str']}，占比{cat_info['percentage']}%）"
+                category_descriptions.append(cat_desc)
+            
+            category_list = "\n".join(category_descriptions)
+            result += f"\n\n【活动分类统计】\n{category_list}"
+        
+        return result
+        
+    def get_detailed_stats(self, hours: float, include_categories: bool = True) -> str:
         """
         获取详细统计数据（2小时、30分钟、5分钟）
         
         Args:
             hours: 小时数（支持小数）
+            include_categories: 是否包含分类统计
             
         Returns:
             自然语言格式的详细数据
@@ -355,7 +507,7 @@ class StatsProcessor:
         raw_event_count = len(events)
         
         # 获取聚合统计
-        stats = self._process_events_to_stats(events, top_n=5)
+        stats = self._process_events_to_stats(events, top_n=5, include_categories=include_categories)
         
         # 生成自然语言描述
         current_time = datetime.now().strftime("%Y年%m月%d日 %H:%M:%S")
@@ -399,7 +551,7 @@ class StatsProcessor:
             
         app_list = "\n".join(app_descriptions)
         
-        return (
+        result = (
             f"当前时间是{current_time}，"
             f"近{time_desc}详细数据：\n\n"
             f"【原始事件流】共{raw_event_count}个事件\n"
@@ -408,6 +560,19 @@ class StatsProcessor:
             f"总统计活跃时长{stats['total_duration_str']}，\n"
             f"其中前{len(stats['top_apps'])}个活跃的应用是：\n{app_list}"
         )
+        
+        # 如果有分类统计，添加分类信息
+        if include_categories and stats.get("category_stats"):
+            category_descriptions = []
+            for cat_info in stats["category_stats"][:3]:  # 详细统计只显示前3个分类
+                cat_desc = f"- {cat_info['category']}（{cat_info['duration_str']}，占比{cat_info['percentage']}%）"
+                category_descriptions.append(cat_desc)
+            
+            if category_descriptions:
+                category_list = "\n".join(category_descriptions)
+                result += f"\n\n【活动分类】\n{category_list}"
+        
+        return result
         
     def get_stats_7d(self) -> str:
         """获取7日聚合统计数据"""
@@ -490,6 +655,129 @@ class StatsProcessor:
         except Exception as e:
             self.logger.error(f"Failed to get AFK time: {e}")
             return {'afk_seconds': 0, 'continuous_afk': False, 'last_active_seconds_ago': 0}
+    
+    def get_category_stats(self, hours: float) -> Dict[str, Any]:
+        """
+        获取指定时间段内的分类统计数据
+        
+        Args:
+            hours: 小时数
+            
+        Returns:
+            分类统计字典，包含各分类的时间和占比
+        """
+        events = self._get_events_for_period(hours)
+        
+        if not events:
+            return {"categories": [], "total_duration": timedelta(0)}
+        
+        # 对事件进行分类
+        categorized_events = self._categorize_events(events)
+        
+        # 统计每个分类的时间
+        category_durations = defaultdict(timedelta)
+        for event in categorized_events:
+            category = event.data.get("$category", ["未分类"])
+            category_str = " > ".join(category)
+            category_durations[category_str] += event.duration
+        
+        # 计算总时长
+        total_duration = sum_durations(events)
+        
+        # 按时长排序
+        sorted_categories = sorted(category_durations.items(), key=lambda x: x[1], reverse=True)
+        
+        # 生成结果
+        categories = []
+        for category_name, duration in sorted_categories:
+            percentage = (duration.total_seconds() / total_duration.total_seconds() * 100) if total_duration.total_seconds() > 0 else 0
+            categories.append({
+                "name": category_name,
+                "duration": duration,
+                "duration_str": self._format_duration(duration),
+                "percentage": round(percentage, 2)
+            })
+        
+        return {
+            "categories": categories,
+            "total_duration": total_duration,
+            "total_duration_str": self._format_duration(total_duration)
+        }
+    
+    def get_productive_vs_unproductive_stats(self, hours: float) -> Dict[str, Any]:
+        """
+        获取生产力与非生产力活动的统计对比
+        
+        Args:
+            hours: 小时数
+            
+        Returns:
+            生产力分析结果
+        """
+        category_stats = self.get_category_stats(hours)
+        
+        if not category_stats["categories"]:
+            return {
+                "productive_time": timedelta(0),
+                "unproductive_time": timedelta(0),
+                "neutral_time": timedelta(0),
+                "productive_percentage": 0,
+                "analysis": "暂无活动数据"
+            }
+        
+        # 定义生产力分类关键词
+        productive_keywords = ["工作", "编程", "文档", "笔记", "设计", "学习", "AI工具"]
+        unproductive_keywords = ["娱乐", "游戏", "视频", "音乐", "社交媒体", "购物"]
+        
+        productive_time = timedelta(0)
+        unproductive_time = timedelta(0)
+        neutral_time = timedelta(0)
+        
+        for cat in category_stats["categories"]:
+            category_name = cat["name"]
+            duration = cat["duration"]
+            
+            # 首先检查用户自定义的生产力分类
+            if hasattr(self, 'productivity_map') and category_name in self.productivity_map:
+                if self.productivity_map[category_name]:
+                    productive_time += duration
+                else:
+                    unproductive_time += duration
+            else:
+                # 使用默认关键词判断
+                is_productive = any(keyword in category_name for keyword in productive_keywords)
+                is_unproductive = any(keyword in category_name for keyword in unproductive_keywords)
+                
+                if is_productive:
+                    productive_time += duration
+                elif is_unproductive:
+                    unproductive_time += duration
+                else:
+                    neutral_time += duration
+        
+        total_time = category_stats["total_duration"]
+        productive_percentage = (productive_time.total_seconds() / total_time.total_seconds() * 100) if total_time.total_seconds() > 0 else 0
+        
+        # 生成分析
+        if productive_percentage >= 70:
+            analysis = "非常高效！大部分时间用于生产性活动"
+        elif productive_percentage >= 50:
+            analysis = "效率良好，保持平衡的工作状态"
+        elif productive_percentage >= 30:
+            analysis = "效率一般，建议增加专注工作时间"
+        else:
+            analysis = "效率较低，大量时间用于非生产性活动"
+        
+        return {
+            "productive_time": productive_time,
+            "productive_time_str": self._format_duration(productive_time),
+            "unproductive_time": unproductive_time,
+            "unproductive_time_str": self._format_duration(unproductive_time),
+            "neutral_time": neutral_time,
+            "neutral_time_str": self._format_duration(neutral_time),
+            "productive_percentage": round(productive_percentage, 2),
+            "analysis": analysis
+        }
     
     def get_stats_today(self) -> str:
         """获取今日统计数据（从凌晨4点开始）

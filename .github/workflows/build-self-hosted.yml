@@ -1,0 +1,364 @@
+name: Build on Self-Hosted Runner
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:  # 允许手动触发
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'both'
+        type: choice
+        options:
+          - windows
+          - macos  
+          - both
+
+jobs:
+  build-windows-self-hosted:
+    name: Build Windows on DNF-DELLWORKSTA
+    runs-on: [self-hosted, windows, DNF-DELLWORKSTA]
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.build_type == 'windows' || github.event.inputs.build_type == 'both'
+    
+    env:
+      PYTHON_PATH: C:\Python39  # 根据实际路径调整
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      with:
+        clean: true  # 确保工作目录干净
+        fetch-depth: 0
+    
+    - name: Setup build environment
+      shell: powershell
+      run: |
+        Write-Host "Setting up build environment on $env:COMPUTERNAME"
+        Write-Host "Current directory: $pwd"
+        Write-Host "Python version:"
+        python --version
+        
+        # 清理旧的构建文件
+        if (Test-Path build) { Remove-Item -Recurse -Force build }
+        if (Test-Path dist) { Remove-Item -Recurse -Force dist }
+        if (Test-Path venv) { Remove-Item -Recurse -Force venv }
+    
+    - name: Create and activate virtual environment
+      shell: powershell
+      run: |
+        Write-Host "Creating virtual environment..."
+        python -m venv venv
+        
+        Write-Host "Activating virtual environment..."
+        & .\venv\Scripts\Activate.ps1
+        
+        Write-Host "Upgrading pip..."
+        python -m pip install --upgrade pip
+    
+    - name: Install dependencies
+      shell: powershell
+      run: |
+        & .\venv\Scripts\Activate.ps1
+        
+        Write-Host "Installing requirements..."
+        pip install -r requirements.txt
+        
+        Write-Host "Installed packages:"
+        pip list
+    
+    - name: Prepare build assets
+      shell: powershell
+      run: |
+        Write-Host "Checking for icon file..."
+        if (!(Test-Path "baal/resources/baal.ico")) {
+          Write-Host "Creating icon directory..."
+          New-Item -ItemType Directory -Force -Path "baal/resources"
+          
+          # 如果需要，这里可以从 PNG 生成 ICO
+          Write-Host "Warning: Icon file missing at baal/resources/baal.ico"
+        }
+    
+    - name: Build with PyInstaller
+      shell: powershell
+      run: |
+        & .\venv\Scripts\Activate.ps1
+        
+        Write-Host "Building with PyInstaller..."
+        
+        # 检查是否有 Windows 专用 spec 文件
+        if (Test-Path "baal_windows.spec") {
+          pyinstaller --clean --noconfirm baal_windows.spec
+        } else {
+          Write-Host "Using generic spec file..."
+          pyinstaller --clean --noconfirm baal.spec
+        }
+        
+        # 检查构建结果
+        if (Test-Path "dist\*.exe") {
+          Write-Host "Build successful!"
+          Get-ChildItem dist\*.exe | ForEach-Object { Write-Host "  - $($_.Name) ($([math]::Round($_.Length / 1MB, 2)) MB)" }
+        } else {
+          Write-Error "Build failed - no exe found in dist folder"
+          exit 1
+        }
+    
+    - name: Test executable
+      shell: powershell
+      continue-on-error: true
+      run: |
+        Write-Host "Testing executable..."
+        $exePath = Get-ChildItem dist\*.exe | Select-Object -First 1
+        
+        if ($exePath) {
+          # 尝试运行 --version 或 --help
+          & $exePath.FullName --version
+        }
+    
+    - name: Create installer (Inno Setup)
+      shell: powershell
+      continue-on-error: true
+      run: |
+        # 检查 Inno Setup 是否已安装
+        $innoSetupPaths = @(
+          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+          "C:\Program Files\Inno Setup 6\ISCC.exe",
+          "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+          "${env:ProgramFiles}\Inno Setup 6\ISCC.exe"
+        )
+        
+        $iscc = $null
+        foreach ($path in $innoSetupPaths) {
+          if (Test-Path $path) {
+            $iscc = $path
+            break
+          }
+        }
+        
+        if ($iscc) {
+          Write-Host "Found Inno Setup at: $iscc"
+          
+          # 创建安装脚本（如果不存在）
+          if (!(Test-Path "installer\windows\baal_setup.iss")) {
+            Write-Host "Creating installer script..."
+            New-Item -ItemType Directory -Force -Path "installer\windows"
+            
+            # 这里创建一个基本的 Inno Setup 脚本
+            @'
+[Setup]
+AppName=Baal Desktop Pet
+AppVersion=1.0
+DefaultDirName={pf}\BaalDesktopPet
+DefaultGroupName=Baal Desktop Pet
+OutputBaseFilename=BaalDesktopPetSetup
+Compression=lzma
+SolidCompression=yes
+
+[Files]
+Source: "..\..\dist\BaalDesktopPet.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\dist\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[Icons]
+Name: "{group}\Baal Desktop Pet"; Filename: "{app}\BaalDesktopPet.exe"
+Name: "{group}\Uninstall"; Filename: "{uninstallexe}"
+Name: "{commondesktop}\Baal Desktop Pet"; Filename: "{app}\BaalDesktopPet.exe"
+'@ | Out-File -Encoding UTF8 "installer\windows\baal_setup.iss"
+          }
+          
+          & $iscc /Q "installer\windows\baal_setup.iss"
+          
+          if (Test-Path "installer\windows\Output\*.exe") {
+            Write-Host "Installer created successfully!"
+          }
+        } else {
+          Write-Host "Inno Setup not found, skipping installer creation"
+        }
+    
+    - name: Package artifacts
+      shell: powershell
+      run: |
+        Write-Host "Packaging artifacts..."
+        
+        # 创建发布目录
+        New-Item -ItemType Directory -Force -Path "artifacts\windows"
+        
+        # 复制 exe
+        Copy-Item -Path "dist\*.exe" -Destination "artifacts\windows\"
+        
+        # 复制安装程序（如果存在）
+        if (Test-Path "installer\windows\Output\*.exe") {
+          Copy-Item -Path "installer\windows\Output\*.exe" -Destination "artifacts\windows\"
+        }
+        
+        # 创建 ZIP 包
+        $exeName = (Get-ChildItem dist\*.exe | Select-Object -First 1).BaseName
+        Compress-Archive -Path "dist\*" -DestinationPath "artifacts\windows\${exeName}-Windows.zip"
+        
+        Write-Host "Artifacts packaged:"
+        Get-ChildItem artifacts\windows\* | ForEach-Object { Write-Host "  - $($_.Name)" }
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: windows-build-${{ github.sha }}
+        path: artifacts/windows/
+        retention-days: 30
+    
+    - name: Cleanup workspace
+      if: always()
+      shell: powershell
+      run: |
+        Write-Host "Cleaning up workspace..."
+        
+        # 删除虚拟环境和构建文件
+        Remove-Item -Recurse -Force venv, build, dist -ErrorAction SilentlyContinue
+        Remove-Item -Recurse -Force artifacts -ErrorAction SilentlyContinue
+        
+        # 清理 PyInstaller 缓存
+        if (Test-Path "$env:APPDATA\pyinstaller") {
+          Remove-Item -Recurse -Force "$env:APPDATA\pyinstaller" -ErrorAction SilentlyContinue
+        }
+
+  # 如果你也有 macOS 自托管 runner
+  build-macos-self-hosted:
+    name: Build macOS (if self-hosted available)
+    # 修改这里以使用你的 macOS runner
+    # runs-on: [self-hosted, macos, YOUR-MAC-NAME]
+    runs-on: macos-latest  # 或者使用 GitHub 提供的 runner
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.build_type == 'macos' || github.event.inputs.build_type == 'both'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      with:
+        clean: true
+        fetch-depth: 0
+    
+    - name: Setup Python
+      run: |
+        # 使用系统 Python 或 pyenv
+        python3 --version
+        python3 -m venv venv
+    
+    - name: Install dependencies
+      run: |
+        source venv/bin/activate
+        pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Build with PyInstaller
+      run: |
+        source venv/bin/activate
+        
+        # 检查 spec 文件
+        if [ -f "baal_macos.spec" ]; then
+          pyinstaller --clean --noconfirm baal_macos.spec
+        else
+          pyinstaller --clean --noconfirm baal.spec
+        fi
+    
+    - name: Create DMG
+      continue-on-error: true
+      run: |
+        source venv/bin/activate
+        pip install dmgbuild
+        
+        if [ -d "dist/*.app" ]; then
+          APP_NAME=$(ls dist/*.app | head -1 | xargs basename)
+          dmgbuild -s scripts/dmgbuild-settings.py -D app="dist/$APP_NAME" "Baal Desktop Pet" "dist/BaalDesktopPet.dmg"
+        fi
+    
+    - name: Package artifacts
+      run: |
+        mkdir -p artifacts/macos
+        cp -r dist/*.app artifacts/macos/ 2>/dev/null || true
+        cp dist/*.dmg artifacts/macos/ 2>/dev/null || true
+        
+        # Create ZIP
+        cd dist
+        if [ -d *.app ]; then
+          zip -r ../artifacts/macos/BaalDesktopPet-macOS.zip *.app
+        fi
+        cd ..
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: macos-build-${{ github.sha }}
+        path: artifacts/macos/
+        retention-days: 30
+
+  create-release:
+    name: Create GitHub Release
+    needs: [build-windows-self-hosted]  # 添加 build-macos-self-hosted 如果有的话
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+    - name: Download artifacts
+      uses: actions/download-artifact@v3
+      with:
+        path: release-artifacts
+    
+    - name: Prepare release assets
+      run: |
+        mkdir -p release
+        
+        # 复制 Windows 构建
+        if [ -d "release-artifacts/windows-build-${{ github.sha }}" ]; then
+          cp release-artifacts/windows-build-${{ github.sha }}/*.zip release/ 2>/dev/null || true
+          cp release-artifacts/windows-build-${{ github.sha }}/*Setup.exe release/ 2>/dev/null || true
+        fi
+        
+        # 复制 macOS 构建
+        if [ -d "release-artifacts/macos-build-${{ github.sha }}" ]; then
+          cp release-artifacts/macos-build-${{ github.sha }}/*.zip release/ 2>/dev/null || true
+          cp release-artifacts/macos-build-${{ github.sha }}/*.dmg release/ 2>/dev/null || true
+        fi
+        
+        ls -la release/
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        draft: true
+        prerelease: false
+        name: Release ${{ github.ref_name }}
+        body: |
+          # Baal Desktop Pet ${{ github.ref_name }}
+          
+          ## 📦 Downloads
+          
+          ### Windows
+          - 📥 **Installer**: `BaalDesktopPetSetup.exe` (Recommended)
+          - 📥 **Portable**: `BaalDesktopPet-Windows.zip`
+          
+          ### macOS
+          - 📥 **DMG**: `BaalDesktopPet.dmg` (Recommended)
+          - 📥 **App Bundle**: `BaalDesktopPet-macOS.zip`
+          
+          ## 📝 Release Notes
+          
+          <!-- Add your release notes here -->
+          
+          ## 🐛 Bug Fixes
+          
+          <!-- List bug fixes -->
+          
+          ## ✨ New Features
+          
+          <!-- List new features -->
+          
+          ## 💔 Breaking Changes
+          
+          <!-- List breaking changes if any -->
+          
+          ---
+          Built on self-hosted runner: DNF-DELLWORKSTA
+          
+        files: |
+          release/*

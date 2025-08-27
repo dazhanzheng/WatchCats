@@ -18,17 +18,19 @@ class SupervisionDialog(QDialog):
     # 信号：当用户确认设置时发出
     supervision_started = pyqtSignal(str, list)  # long_term_goal, short_term_goals
     
-    def __init__(self, parent=None, current_goal="", current_tasks=None):
+    def __init__(self, parent=None, current_goal="", current_tasks=None, is_supervision_active=False):
         """初始化对话框
         
         Args:
             parent: 父窗口
             current_goal: 当前的长期目标
             current_tasks: 当前的短期目标列表
+            is_supervision_active: 监督模式是否正在运行
         """
         super().__init__(parent)
         self.long_term_goal = current_goal
         self.short_term_goals = current_tasks or []
+        self.is_supervision_active = is_supervision_active
         self.init_ui()
         
         # 如果有现有设置，加载它们
@@ -161,9 +163,28 @@ class SupervisionDialog(QDialog):
         # 短期目标列表
         self.short_term_list = QListWidget()
         self.short_term_list.setMaximumHeight(120)
+        self.short_term_list.itemDoubleClicked.connect(self.edit_goal)
         short_term_layout.addWidget(self.short_term_list)
         
-        # 删除按钮
+        # 编辑和删除按钮
+        goal_buttons_layout = QHBoxLayout()
+        
+        self.edit_button = QPushButton("✏️ 编辑选中的目标")
+        self.edit_button.setStyleSheet("""
+            QPushButton {
+                background-color: #f39c12;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 5px 15px;
+            }
+            QPushButton:hover {
+                background-color: #e67e22;
+            }
+        """)
+        self.edit_button.clicked.connect(self.edit_goal)
+        goal_buttons_layout.addWidget(self.edit_button)
+        
         self.remove_button = QPushButton("🗑 删除选中的目标")
         self.remove_button.setStyleSheet("""
             QPushButton {
@@ -178,7 +199,9 @@ class SupervisionDialog(QDialog):
             }
         """)
         self.remove_button.clicked.connect(self.remove_goal)
-        short_term_layout.addWidget(self.remove_button)
+        goal_buttons_layout.addWidget(self.remove_button)
+        
+        short_term_layout.addLayout(goal_buttons_layout)
         
         short_term_group.setLayout(short_term_layout)
         layout.addWidget(short_term_group)
@@ -204,7 +227,9 @@ class SupervisionDialog(QDialog):
         self.cancel_button.clicked.connect(self.reject)
         button_layout.addWidget(self.cancel_button)
         
-        self.start_button = QPushButton("🚀 开始监督")
+        # 根据监督模式状态设置按钮文本
+        button_text = "💾 保存修改" if self.is_supervision_active else "🚀 开始监督"
+        self.start_button = QPushButton(button_text)
         self.start_button.clicked.connect(self.start_supervision)
         self.start_button.setDefault(True)
         
@@ -248,6 +273,25 @@ class SupervisionDialog(QDialog):
         current_item = self.short_term_list.currentItem()
         if current_item:
             self.short_term_list.takeItem(self.short_term_list.row(current_item))
+    
+    def edit_goal(self):
+        """编辑选中的短期目标"""
+        current_item = self.short_term_list.currentItem()
+        if not current_item:
+            return
+        
+        from PyQt6.QtWidgets import QInputDialog
+        
+        # 显示编辑对话框
+        new_text, ok = QInputDialog.getText(
+            self,
+            "编辑目标",
+            "修改短期目标:",
+            text=current_item.text()
+        )
+        
+        if ok and new_text.strip():
+            current_item.setText(new_text.strip())
     
     # 兼容旧方法名
     def add_task(self):
