@@ -145,7 +145,7 @@ hiddenimports += [
     'aw_client', 'aw_client.client', 'aw_core', 'aw_core.models',
     'PyQt6', 'PyQt6.QtCore', 'PyQt6.QtGui', 'PyQt6.QtWidgets',
     'PyQt6.QtNetwork', 'PyQt6.QtPrintSupport', 'PyQt6.sip',
-    'httpx', 'volcengine_python_sdk', 'requests',
+    'httpx', 'requests',
     'langchain', 'langchain_openai', 'langchain_core',
     'persist_queue', 'appdirs', 'iso8601', 'peewee',
     'jsonschema', 'icalendar', 'pytz', 'dateutil',

@@ -134,9 +134,8 @@ jobs:
         # 安装其他依赖（跳过有问题的包）
         Write-Host "Installing other dependencies..." -ForegroundColor Gray
         
-        # 创建临时的 requirements 文件，排除问题包
+        # 创建临时的 requirements 文件，排除 PyQt6-sip（将单独处理）
         $requirements = Get-Content requirements.txt | Where-Object { 
-          $_ -notlike "*volcengine-python-sdk*" -and 
           $_ -notlike "*PyQt6-sip==*" -and
           $_ -notlike "#*" -and
           $_.Trim() -ne ""
@@ -145,13 +144,6 @@ jobs:
         
         # 安装其他依赖
         & venv\Scripts\python.exe -m pip install -r requirements-temp.txt
-        
-        # 单独处理 volcengine-python-sdk（设置超时）
-        Write-Host "Installing volcengine-python-sdk (this may take a while)..." -ForegroundColor Yellow
-        & venv\Scripts\python.exe -m pip install volcengine-python-sdk --default-timeout=300
-        if ($LASTEXITCODE -ne 0) {
-          Write-Host "volcengine-python-sdk installation failed, continuing without it..." -ForegroundColor Yellow
-        }
         
         # 清理临时文件
         Remove-Item requirements-temp.txt -Force -ErrorAction SilentlyContinue

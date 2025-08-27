@@ -10,7 +10,7 @@ langchain==0.3.26
 langchain-core==0.3.70
 langchain-openai
 httpx>=0.28.0
-volcengine-python-sdk>=4.0.0
+# volcengine-python-sdk>=4.0.0  # 注释：实际项目未使用，通过OpenAI兼容API访问火山引擎
 
 # ActivityWatch 客户端
 aw-client>=0.5.13
