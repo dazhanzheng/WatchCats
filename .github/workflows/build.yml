@@ -1,4 +1,4 @@
-name: Build
+name: Build Simple
 
 on:
   push:
@@ -10,7 +10,6 @@ on:
 jobs:
   build-windows:
     name: Build Windows Application
-    # 只在 self-hosted runner 上运行
     runs-on: self-hosted
     
     steps:
@@ -23,110 +22,101 @@ jobs:
     - name: Setup environment
       shell: powershell
       run: |
-        Write-Host "===================================" -ForegroundColor Cyan
+        Write-Host "====================================" -ForegroundColor Cyan
         Write-Host " Baal Desktop Pet - Windows Build" -ForegroundColor Cyan
-        Write-Host "===================================" -ForegroundColor Cyan
+        Write-Host "====================================" -ForegroundColor Cyan
         Write-Host ""
         Write-Host "Runner: $env:COMPUTERNAME" -ForegroundColor Yellow
+        Write-Host "Directory: $pwd" -ForegroundColor Yellow
         Write-Host "Time: $(Get-Date)" -ForegroundColor Yellow
-        Write-Host "Commit: ${{ github.sha }}" -ForegroundColor Yellow
+        
+        # Python 信息
         Write-Host ""
+        Write-Host "Python information:" -ForegroundColor Green
+        python --version
+        python -c "import sys; print(f'Python path: {sys.executable}')"
         
         # 清理旧文件
-        Write-Host "Cleaning old build files..." -ForegroundColor Green
-        Remove-Item -Path build, dist, venv -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Host ""
+        Write-Host "Cleaning old files..." -ForegroundColor Green
+        @("build", "dist", "__pycache__") | ForEach-Object {
+          if (Test-Path $_) {
+            Remove-Item -Path $_ -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Host "  - Removed $_" -ForegroundColor Gray
+          }
+        }
     
-    - name: Setup Python environment
+    - name: Install dependencies (no venv)
       shell: powershell
       run: |
-        Write-Host "Checking Python installation..." -ForegroundColor Green
-        python --version
+        Write-Host "Installing dependencies directly to user..." -ForegroundColor Green
         
-        Write-Host "Creating virtual environment..." -ForegroundColor Green
-        python -m venv venv
+        # 升级 pip
+        Write-Host "Upgrading pip..." -ForegroundColor Yellow
+        python -m pip install --upgrade pip --user --no-warn-script-location
         
-        # 检查虚拟环境是否创建成功
-        if (Test-Path "venv\Scripts\python.exe") {
-          Write-Host "Virtual environment created successfully" -ForegroundColor Green
-        } else {
-          Write-Error "Failed to create virtual environment"
-          exit 1
-        }
+        # 安装 PyInstaller
+        Write-Host "Installing PyInstaller..." -ForegroundColor Yellow
+        python -m pip install "pyinstaller==6.11.1" --user --no-warn-script-location --force-reinstall
         
-        Write-Host "Installing dependencies..." -ForegroundColor Green
-        # 直接使用虚拟环境中的 Python，不需要激活
-        .\venv\Scripts\python.exe -m pip install --upgrade pip
-        .\venv\Scripts\pip.exe install -r requirements.txt
+        # 安装项目依赖
+        Write-Host "Installing requirements..." -ForegroundColor Yellow
+        python -m pip install -r requirements.txt --user --no-warn-script-location
         
-        Write-Host "Installed packages:" -ForegroundColor Green
-        .\venv\Scripts\pip.exe list
+        # 显示安装的包
+        Write-Host ""
+        Write-Host "Key packages:" -ForegroundColor Green
+        python -m pip list | Select-String -Pattern "PyQt6|pyinstaller|langchain|aw-"
     
     - name: Build with PyInstaller
       shell: powershell
       run: |
         Write-Host "Building executable..." -ForegroundColor Green
         
-        # 使用适当的 spec 文件
+        # 确定 spec 文件
         $specFile = if (Test-Path "baal_windows.spec") {
           "baal_windows.spec"
-        } else {
+        } elseif (Test-Path "baal.spec") {
           "baal.spec"
+        } else {
+          Write-Error "No spec file found!"
+          exit 1
         }
         
         Write-Host "Using spec file: $specFile" -ForegroundColor Yellow
         
-        # 使用虚拟环境中的 PyInstaller
-        .\venv\Scripts\pyinstaller.exe --clean --noconfirm $specFile
+        # 清理缓存
+        if ($env:APPDATA) {
+          $cacheDir = "$env:APPDATA\pyinstaller"
+          if (Test-Path $cacheDir) {
+            Remove-Item -Path $cacheDir -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Host "Cleaned PyInstaller cache" -ForegroundColor Gray
+          }
+        }
         
-        # 检查构建结果
-        $exeFiles = Get-ChildItem -Path dist -Filter "*.exe" -ErrorAction SilentlyContinue
+        # 运行 PyInstaller
+        Write-Host "Running PyInstaller..." -ForegroundColor Cyan
+        python -m PyInstaller --clean --noconfirm $specFile
+        
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "PyInstaller failed with exit code $LASTEXITCODE"
+          exit 1
+        }
+        
+        # 检查输出
+        Write-Host ""
+        Write-Host "Checking output..." -ForegroundColor Yellow
+        
+        $exeFiles = Get-ChildItem -Path "dist" -Filter "*.exe" -ErrorAction SilentlyContinue
         if ($exeFiles) {
-          Write-Host ""
-          Write-Host "Build successful!" -ForegroundColor Green
+          Write-Host "✓ Build successful!" -ForegroundColor Green
           foreach ($exe in $exeFiles) {
             $sizeMB = [math]::Round($exe.Length / 1MB, 2)
             Write-Host "  - $($exe.Name) ($sizeMB MB)" -ForegroundColor Cyan
           }
         } else {
-          Write-Error "Build failed - no exe found"
+          Write-Error "No executable found in dist!"
           exit 1
-        }
-    
-    - name: Create installer (optional)
-      shell: powershell
-      continue-on-error: true
-      run: |
-        # 查找 Inno Setup
-        $innoSetupPaths = @(
-          "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
-          "${env:ProgramFiles}\Inno Setup 6\ISCC.exe",
-          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
-          "C:\Program Files\Inno Setup 6\ISCC.exe"
-        )
-        
-        $iscc = $null
-        foreach ($path in $innoSetupPaths) {
-          if (Test-Path $path) {
-            $iscc = $path
-            break
-          }
-        }
-        
-        if ($iscc) {
-          Write-Host "Creating installer with Inno Setup..." -ForegroundColor Green
-          
-          # 检查安装脚本
-          if (Test-Path "installer\windows\baal_setup.iss") {
-            & $iscc /Q "installer\windows\baal_setup.iss"
-            
-            if (Test-Path "installer\windows\Output\*.exe") {
-              Write-Host "Installer created successfully!" -ForegroundColor Green
-            }
-          } else {
-            Write-Host "No installer script found, skipping installer creation" -ForegroundColor Yellow
-          }
-        } else {
-          Write-Host "Inno Setup not found, skipping installer creation" -ForegroundColor Yellow
         }
     
     - name: Package artifacts
@@ -137,66 +127,60 @@ jobs:
         # 创建 artifacts 目录
         New-Item -ItemType Directory -Force -Path artifacts | Out-Null
         
-        # 复制可执行文件
-        Copy-Item -Path "dist\*.exe" -Destination artifacts\
-        
-        # 复制安装程序（如果存在）
-        if (Test-Path "installer\windows\Output\*.exe") {
-          Copy-Item -Path "installer\windows\Output\*.exe" -Destination artifacts\
+        # 复制 exe 文件
+        Get-ChildItem -Path "dist" -Filter "*.exe" | ForEach-Object {
+          Copy-Item -Path $_.FullName -Destination "artifacts\"
+          Write-Host "  - Copied: $($_.Name)" -ForegroundColor Gray
         }
         
-        # 创建 ZIP 包
-        $version = if ("${{ github.ref }}" -match "refs/tags/(.+)") {
+        # 创建 ZIP
+        $version = if ("${{ github.ref }}" -match "refs/tags/v(.+)") {
           $matches[1]
         } else {
           "latest"
         }
         
         $zipName = "BaalDesktopPet-Windows-${version}.zip"
-        Compress-Archive -Path "dist\*" -DestinationPath "artifacts\$zipName"
+        Write-Host "Creating: $zipName" -ForegroundColor Yellow
         
+        Compress-Archive -Path "dist\*" -DestinationPath "artifacts\$zipName" -Force
+        
+        # 显示最终 artifacts
         Write-Host ""
         Write-Host "Artifacts:" -ForegroundColor Green
-        Get-ChildItem artifacts\* | ForEach-Object {
+        Get-ChildItem "artifacts" | ForEach-Object {
           $sizeMB = [math]::Round($_.Length / 1MB, 2)
           Write-Host "  - $($_.Name) ($sizeMB MB)" -ForegroundColor Cyan
         }
     
-    - name: Upload build artifacts
+    - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: windows-build
+        name: windows-build-${{ github.run_number }}
         path: artifacts/
         retention-days: 30
     
     - name: Create Release
       if: startsWith(github.ref, 'refs/tags/v')
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
         draft: false
         prerelease: false
         name: Release ${{ github.ref_name }}
-        body: |
-          # Baal Desktop Pet ${{ github.ref_name }}
-          
-          ## 📦 下载
-          
-          - **Windows 安装程序**: `BaalDesktopPetSetup.exe`（推荐）
-          - **Windows 便携版**: `BaalDesktopPet-Windows-${{ github.ref_name }}.zip`
-          
-          ## 📝 更新内容
-          
-          请查看提交历史了解详细更新内容。
-          
-          ---
-          *Built on self-hosted runner*
         files: |
           artifacts/*.zip
           artifacts/*.exe
+        fail_on_unmatched_files: false
+        generate_release_notes: true
     
     - name: Cleanup
       if: always()
       shell: powershell
       run: |
         Write-Host "Cleaning up..." -ForegroundColor Green
-        Remove-Item -Path venv, build, dist -Recurse -Force -ErrorAction SilentlyContinue
+        @("build", "dist", "__pycache__") | ForEach-Object {
+          if (Test-Path $_) {
+            Remove-Item -Path $_ -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Host "  - Cleaned $_" -ForegroundColor Gray
+          }
+        }
