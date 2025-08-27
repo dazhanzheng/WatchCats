@@ -34,20 +34,45 @@ jobs:
         Write-Host ""
         Write-Host "Searching for Python..." -ForegroundColor Green
         
-        # 查找 Python 的常见位置
-        $pythonPaths = @(
+        # 查找 Python 的常见位置（扩展搜索）
+        $pythonPaths = @()
+        
+        # 添加所有可能的 Python 位置
+        $searchDirs = @(
+          "C:\",
+          "C:\Program Files\",
+          "C:\Program Files (x86)\",
+          "$env:LOCALAPPDATA\Programs\",
+          "$env:ProgramFiles\",
+          "${env:ProgramFiles(x86)}\"
+        )
+        
+        # 搜索 Python* 目录
+        foreach ($dir in $searchDirs) {
+          if (Test-Path $dir) {
+            $pythonDirs = Get-ChildItem -Path $dir -Directory -Filter "Python*" -ErrorAction SilentlyContinue
+            foreach ($pyDir in $pythonDirs) {
+              $exePath = Join-Path $pyDir.FullName "python.exe"
+              if (Test-Path $exePath) {
+                $pythonPaths += $exePath
+              }
+            }
+          }
+        }
+        
+        # 添加常见的直接路径（包括 Python 3.13）
+        $pythonPaths += @(
+          "C:\Python\python.exe",
+          "C:\Python3\python.exe",
+          "C:\Python37\python.exe",
+          "C:\Python38\python.exe",
           "C:\Python39\python.exe",
           "C:\Python310\python.exe",
           "C:\Python311\python.exe",
           "C:\Python312\python.exe",
-          "C:\Program Files\Python39\python.exe",
-          "C:\Program Files\Python310\python.exe",
-          "C:\Program Files\Python311\python.exe",
-          "C:\Program Files\Python312\python.exe",
-          "$env:LOCALAPPDATA\Programs\Python\Python39\python.exe",
-          "$env:LOCALAPPDATA\Programs\Python\Python310\python.exe",
-          "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe",
-          "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe"
+          "C:\Python313\python.exe",
+          "C:\Program Files\Python313\python.exe",
+          "$env:LOCALAPPDATA\Programs\Python\Python313\python.exe"
         )
         
         $pythonFound = $false
@@ -127,10 +152,12 @@ jobs:
             "C:\Python310\python.exe",
             "C:\Python311\python.exe",
             "C:\Python312\python.exe",
+            "C:\Python313\python.exe",
             "$env:LOCALAPPDATA\Programs\Python\Python39\python.exe",
             "$env:LOCALAPPDATA\Programs\Python\Python310\python.exe",
             "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe",
-            "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe"
+            "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
+            "$env:LOCALAPPDATA\Programs\Python\Python313\python.exe"
           )
           
           $python = ""
@@ -181,10 +208,12 @@ jobs:
             "C:\Python310\python.exe",
             "C:\Python311\python.exe",
             "C:\Python312\python.exe",
+            "C:\Python313\python.exe",
             "$env:LOCALAPPDATA\Programs\Python\Python39\python.exe",
             "$env:LOCALAPPDATA\Programs\Python\Python310\python.exe",
             "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe",
-            "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe"
+            "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
+            "$env:LOCALAPPDATA\Programs\Python\Python313\python.exe"
           )
           
           $python = ""
