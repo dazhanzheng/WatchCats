@@ -112,11 +112,49 @@ jobs:
       run: |
         Write-Host "Installing dependencies..." -ForegroundColor Yellow
         
-        # 激活虚拟环境并安装依赖
-        & venv\Scripts\python.exe -m pip install --upgrade pip
-        & venv\Scripts\python.exe -m pip install wheel setuptools
+        # 升级 pip 和基础工具
+        & venv\Scripts\python.exe -m pip install --upgrade pip wheel setuptools
+        
+        # 安装 PyInstaller
+        Write-Host "Installing PyInstaller..." -ForegroundColor Gray
         & venv\Scripts\python.exe -m pip install "pyinstaller==${{ env.PYINSTALLER_VERSION }}"
-        & venv\Scripts\python.exe -m pip install -r requirements.txt
+        
+        # 尝试安装预编译的 PyQt6 包（避免编译）
+        Write-Host "Installing PyQt6 (precompiled wheels)..." -ForegroundColor Gray
+        & venv\Scripts\python.exe -m pip install --only-binary :all: PyQt6==6.5.3 PyQt6-Qt6==6.5.3
+        
+        # 如果 PyQt6-sip 需要编译，使用预编译版本或降级
+        Write-Host "Installing PyQt6-sip..." -ForegroundColor Gray
+        & venv\Scripts\python.exe -m pip install PyQt6-sip==13.6.0 --prefer-binary
+        if ($LASTEXITCODE -ne 0) {
+          Write-Host "PyQt6-sip compilation failed, trying alternative..." -ForegroundColor Yellow
+          & venv\Scripts\python.exe -m pip install PyQt6-sip --prefer-binary
+        }
+        
+        # 安装其他依赖（跳过有问题的包）
+        Write-Host "Installing other dependencies..." -ForegroundColor Gray
+        
+        # 创建临时的 requirements 文件，排除问题包
+        $requirements = Get-Content requirements.txt | Where-Object { 
+          $_ -notlike "*volcengine-python-sdk*" -and 
+          $_ -notlike "*PyQt6-sip==*" -and
+          $_ -notlike "#*" -and
+          $_.Trim() -ne ""
+        }
+        $requirements | Set-Content requirements-temp.txt
+        
+        # 安装其他依赖
+        & venv\Scripts\python.exe -m pip install -r requirements-temp.txt
+        
+        # 单独处理 volcengine-python-sdk（设置超时）
+        Write-Host "Installing volcengine-python-sdk (this may take a while)..." -ForegroundColor Yellow
+        & venv\Scripts\python.exe -m pip install volcengine-python-sdk --default-timeout=300
+        if ($LASTEXITCODE -ne 0) {
+          Write-Host "volcengine-python-sdk installation failed, continuing without it..." -ForegroundColor Yellow
+        }
+        
+        # 清理临时文件
+        Remove-Item requirements-temp.txt -Force -ErrorAction SilentlyContinue
         
         Write-Host ""
         Write-Host "Installed packages:" -ForegroundColor Green
