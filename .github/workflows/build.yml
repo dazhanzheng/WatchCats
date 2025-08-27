@@ -33,8 +33,15 @@ jobs:
         # Python 信息
         Write-Host ""
         Write-Host "Python information:" -ForegroundColor Green
-        python --version
-        python -c "import sys; print(f'Python path: {sys.executable}')"
+        try {
+          $pythonVersion = & python --version 2>&1
+          Write-Host "Version: $pythonVersion" -ForegroundColor Cyan
+          
+          $pythonPath = python -c "import sys; print(sys.executable)" 2>&1
+          Write-Host "Path: $pythonPath" -ForegroundColor Cyan
+        } catch {
+          Write-Host "Error getting Python info: $_" -ForegroundColor Red
+        }
         
         # 清理旧文件
         Write-Host ""
