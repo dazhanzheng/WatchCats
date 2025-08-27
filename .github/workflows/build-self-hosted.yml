@@ -21,8 +21,14 @@ on:
 
 jobs:
   build-windows-self-hosted:
-    name: Build Windows on DNF-DELLWORKSTA
-    runs-on: [self-hosted, windows, DNF-DELLWORKSTA]
+    name: Build Windows on Self-Hosted Runner
+    # 使用更灵活的标签配置
+    # 选项1: 只使用 self-hosted（适用于只有一个 runner）
+    runs-on: self-hosted
+    # 选项2: 使用 self-hosted 和 Windows（注意大小写）
+    # runs-on: [self-hosted, Windows]
+    # 选项3: 指定特定的 runner（如果标签已正确配置）
+    # runs-on: [self-hosted, DNF-DELLWORKSTA]
     if: github.event_name != 'workflow_dispatch' || github.event.inputs.build_type == 'windows' || github.event.inputs.build_type == 'both'
     
     env:
