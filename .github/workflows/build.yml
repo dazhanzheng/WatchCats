@@ -1,11 +1,17 @@
-name: Build Simple
+name: Build
 
 on:
   push:
     branches: [ main ]
     tags:
       - 'v*'
+  pull_request:
+    branches: [ main ]
   workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.13'
+  PYINSTALLER_VERSION: '6.11.1'
 
 jobs:
   build-windows:
@@ -19,269 +25,111 @@ jobs:
         clean: true
         fetch-depth: 0
     
-    - name: Setup environment
+    - name: Setup Python environment
       shell: powershell
       run: |
-        Write-Host "====================================" -ForegroundColor Cyan
-        Write-Host " Baal Desktop Pet - Windows Build" -ForegroundColor Cyan
-        Write-Host "====================================" -ForegroundColor Cyan
+        Write-Host "================================================" -ForegroundColor Cyan
+        Write-Host " Baal Desktop Pet - Windows Build Setup" -ForegroundColor Cyan
+        Write-Host "================================================" -ForegroundColor Cyan
         Write-Host ""
-        Write-Host "Runner: $env:COMPUTERNAME" -ForegroundColor Yellow
-        Write-Host "Directory: $pwd" -ForegroundColor Yellow
-        Write-Host "Time: $(Get-Date)" -ForegroundColor Yellow
-        
-        # 查找并设置 Python
+        Write-Host "Build Information:" -ForegroundColor Green
+        Write-Host "  Runner: $env:COMPUTERNAME" -ForegroundColor Gray
+        Write-Host "  Directory: $pwd" -ForegroundColor Gray
+        Write-Host "  Time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor Gray
+        Write-Host "  Commit: ${{ github.sha }}" -ForegroundColor Gray
         Write-Host ""
-        Write-Host "Searching for Python..." -ForegroundColor Green
         
-        # 查找 Python 的常见位置（扩展搜索）
-        $pythonPaths = @()
+        # 查找 Python（简单版本，因为我们知道 Python 已安装）
+        Write-Host "Verifying Python installation..." -ForegroundColor Yellow
         
-        # 添加所有可能的 Python 位置
-        $searchDirs = @(
-          "C:\",
-          "C:\Program Files\",
-          "C:\Program Files (x86)\",
-          "$env:LOCALAPPDATA\Programs\",
-          "$env:ProgramFiles\",
-          "${env:ProgramFiles(x86)}\"
-        )
-        
-        # 搜索 Python* 目录
-        foreach ($dir in $searchDirs) {
-          if (Test-Path $dir) {
-            $pythonDirs = Get-ChildItem -Path $dir -Directory -Filter "Python*" -ErrorAction SilentlyContinue
-            foreach ($pyDir in $pythonDirs) {
-              $exePath = Join-Path $pyDir.FullName "python.exe"
-              if (Test-Path $exePath) {
-                $pythonPaths += $exePath
-              }
-            }
-          }
-        }
-        
-        # 添加常见的直接路径（包括 Python 3.13）
-        $pythonPaths += @(
-          "C:\Python\python.exe",
-          "C:\Python3\python.exe",
-          "C:\Python37\python.exe",
-          "C:\Python38\python.exe",
-          "C:\Python39\python.exe",
-          "C:\Python310\python.exe",
-          "C:\Python311\python.exe",
-          "C:\Python312\python.exe",
-          "C:\Python313\python.exe",
-          "C:\Program Files\Python313\python.exe",
-          "$env:LOCALAPPDATA\Programs\Python\Python313\python.exe"
-        )
-        
-        $pythonFound = $false
-        $pythonExe = ""
-        
-        # 先检查 PATH 中的 python（排除 WindowsApps 占位符）
-        $pathPython = Get-Command python -ErrorAction SilentlyContinue
-        if ($pathPython -and $pathPython.Source -notlike "*WindowsApps*") {
-          $pythonExe = $pathPython.Source
-          Write-Host "Found Python in PATH: $pythonExe" -ForegroundColor Green
-          $pythonFound = $true
+        # 尝试使用 python 命令
+        $pythonCmd = Get-Command python -ErrorAction SilentlyContinue
+        if ($pythonCmd -and $pythonCmd.Source -notlike "*WindowsApps*") {
+          $python = "python"
         } else {
-          if ($pathPython -and $pathPython.Source -like "*WindowsApps*") {
-            Write-Host "Found Windows Store Python stub (not real Python), searching for actual Python..." -ForegroundColor Yellow
-          } else {
-            Write-Host "Python not in PATH, searching common locations..." -ForegroundColor Yellow
-          }
+          # 如果 python 命令不可用，查找常见位置
+          $pythonPaths = @(
+            "C:\Python313\python.exe",
+            "C:\Program Files\Python313\python.exe",
+            "$env:LOCALAPPDATA\Programs\Python\Python313\python.exe",
+            "C:\Python39\python.exe",
+            "C:\Python310\python.exe",
+            "C:\Python311\python.exe",
+            "C:\Python312\python.exe"
+          )
           
-          # 搜索常见位置
-          foreach ($path in $pythonPaths) {
-            if (Test-Path $path) {
-              # 验证这是真正的 Python，不是占位符
-              try {
-                $testVersion = & $path --version 2>&1
-                if ($testVersion -match "Python \d+\.\d+") {
-                  $pythonExe = $path
-                  Write-Host "Found Python at: $pythonExe" -ForegroundColor Green
-                  Write-Host "  Version: $testVersion" -ForegroundColor Cyan
-                  
-                  # 将找到的 Python 添加到当前会话的 PATH
-                  $pythonDir = Split-Path $pythonExe
-                  $env:PATH = "$pythonDir;$env:PATH"
-                  Write-Host "  Added to PATH: $pythonDir" -ForegroundColor Cyan
-                  $pythonFound = $true
-                  break
-                }
-              } catch {
-                # 这个 Python 不能执行，继续搜索
-              }
-            }
+          $python = $pythonPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
+          
+          if ($python) {
+            # 添加到 PATH 以便后续步骤使用
+            $pythonDir = Split-Path $python
+            $env:PATH = "$pythonDir;$env:PATH"
+            Write-Host "Added Python to PATH: $pythonDir" -ForegroundColor Green
+          } else {
+            Write-Error "Python not found. Please ensure Python 3.9+ is installed."
+            exit 1
           }
         }
         
-        if (-not $pythonFound) {
-          Write-Error "Python not found! Please install Python 3.9 or later."
-          Write-Host ""
-          Write-Host "Searched locations:" -ForegroundColor Yellow
-          foreach ($path in $pythonPaths) {
-            Write-Host "  - $path" -ForegroundColor Gray
-          }
+        # 显示 Python 版本
+        $version = & $python --version 2>&1
+        Write-Host "Python version: $version" -ForegroundColor Green
+        
+        # 设置环境变量供后续步骤使用
+        echo "PYTHON_CMD=$python" >> $env:GITHUB_ENV
+    
+    - name: Create virtual environment
+      shell: powershell
+      run: |
+        Write-Host "Creating virtual environment..." -ForegroundColor Yellow
+        
+        $python = $env:PYTHON_CMD
+        if (-not $python) { $python = "python" }
+        
+        # 清理旧的虚拟环境
+        if (Test-Path venv) {
+          Write-Host "Removing old virtual environment..." -ForegroundColor Gray
+          Remove-Item -Path venv -Recurse -Force
+        }
+        
+        # 创建新的虚拟环境
+        & $python -m venv venv
+        
+        # 验证虚拟环境
+        if (Test-Path "venv\Scripts\python.exe") {
+          Write-Host "✓ Virtual environment created successfully" -ForegroundColor Green
+          
+          # 显示虚拟环境的 Python 版本
+          $venvVersion = & "venv\Scripts\python.exe" --version 2>&1
+          Write-Host "Virtual environment Python: $venvVersion" -ForegroundColor Gray
+        } else {
+          Write-Error "Failed to create virtual environment"
           exit 1
         }
-        
-        # 显示 Python 信息
-        Write-Host ""
-        Write-Host "Python information:" -ForegroundColor Green
-        $version = & $pythonExe --version 2>&1
-        Write-Host "Version: $version" -ForegroundColor Cyan
-        Write-Host "Path: $pythonExe" -ForegroundColor Cyan
-        
-        # 创建 python 别名（如果需要）
-        if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
-          Write-Host "Creating python alias..." -ForegroundColor Yellow
-          Set-Alias -Name python -Value $pythonExe -Scope Global
-        }
-        
-        # 清理旧文件
-        Write-Host ""
-        Write-Host "Cleaning old files..." -ForegroundColor Green
-        @("build", "dist", "__pycache__") | ForEach-Object {
-          if (Test-Path $_) {
-            Remove-Item -Path $_ -Recurse -Force -ErrorAction SilentlyContinue
-            Write-Host "  - Removed $_" -ForegroundColor Gray
-          }
-        }
     
-    - name: Install dependencies (no venv)
+    - name: Install dependencies
       shell: powershell
       run: |
-        Write-Host "Installing dependencies directly to user..." -ForegroundColor Green
+        Write-Host "Installing dependencies..." -ForegroundColor Yellow
         
-        # 获取 Python 路径（排除 WindowsApps 占位符）
-        $pythonCmd = Get-Command python -ErrorAction SilentlyContinue
-        $python = ""
+        # 激活虚拟环境并安装依赖
+        & venv\Scripts\python.exe -m pip install --upgrade pip
+        & venv\Scripts\python.exe -m pip install wheel setuptools
+        & venv\Scripts\python.exe -m pip install "pyinstaller==${{ env.PYINSTALLER_VERSION }}"
+        & venv\Scripts\python.exe -m pip install -r requirements.txt
         
-        if ($pythonCmd -and $pythonCmd.Source -notlike "*WindowsApps*") {
-          # 验证能执行
-          try {
-            $testVer = & python --version 2>&1
-            if ($testVer -match "Python") {
-              $python = "python"
-              Write-Host "Using Python from PATH" -ForegroundColor Green
-            }
-          } catch {}
-        }
-        
-        if (-not $python) {
-          Write-Host "Searching for Python in common locations..." -ForegroundColor Yellow
-          
-          # 查找 Python
-          $pythonPaths = @(
-            "C:\Python39\python.exe",
-            "C:\Python310\python.exe",
-            "C:\Python311\python.exe",
-            "C:\Python312\python.exe",
-            "C:\Python313\python.exe",
-            "C:\Program Files\Python313\python.exe",
-            "$env:LOCALAPPDATA\Programs\Python\Python39\python.exe",
-            "$env:LOCALAPPDATA\Programs\Python\Python310\python.exe",
-            "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe",
-            "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
-            "$env:LOCALAPPDATA\Programs\Python\Python313\python.exe"
-          )
-          
-          foreach ($path in $pythonPaths) {
-            if (Test-Path $path) {
-              # 验证这是真正的 Python
-              try {
-                $testVer = & $path --version 2>&1
-                if ($testVer -match "Python") {
-                  $python = $path
-                  Write-Host "Found Python at: $python" -ForegroundColor Green
-                  Write-Host "Version: $testVer" -ForegroundColor Cyan
-                  break
-                }
-              } catch {}
-            }
-          }
-          
-          if (-not $python) {
-            Write-Error "No working Python installation found!"
-            Write-Host "Please ensure Python 3.9+ is installed and not the Windows Store version" -ForegroundColor Red
-            exit 1
-          }
-        }
-        
-        # 升级 pip
-        Write-Host "Upgrading pip..." -ForegroundColor Yellow
-        & $python -m pip install --upgrade pip --user --no-warn-script-location
-        
-        # 安装 PyInstaller
-        Write-Host "Installing PyInstaller..." -ForegroundColor Yellow
-        & $python -m pip install "pyinstaller==6.11.1" --user --no-warn-script-location --force-reinstall
-        
-        # 安装项目依赖
-        Write-Host "Installing requirements..." -ForegroundColor Yellow
-        & $python -m pip install -r requirements.txt --user --no-warn-script-location
-        
-        # 显示安装的包
         Write-Host ""
-        Write-Host "Key packages:" -ForegroundColor Green
-        & $python -m pip list | Select-String -Pattern "PyQt6|pyinstaller|langchain|aw-"
+        Write-Host "Installed packages:" -ForegroundColor Green
+        & venv\Scripts\python.exe -m pip list | Select-String -Pattern "PyQt6|pyinstaller|langchain|aw-" | ForEach-Object {
+          Write-Host "  $_" -ForegroundColor Gray
+        }
     
-    - name: Build with PyInstaller
+    - name: Build executable
       shell: powershell
       run: |
-        Write-Host "Building executable..." -ForegroundColor Green
+        Write-Host "Building Windows executable..." -ForegroundColor Yellow
         
-        # 获取 Python 路径（与前面步骤相同的逻辑）
-        $pythonCmd = Get-Command python -ErrorAction SilentlyContinue
-        $python = ""
-        
-        if ($pythonCmd -and $pythonCmd.Source -notlike "*WindowsApps*") {
-          try {
-            $testVer = & python --version 2>&1
-            if ($testVer -match "Python") {
-              $python = "python"
-              Write-Host "Using Python from PATH" -ForegroundColor Green
-            }
-          } catch {}
-        }
-        
-        if (-not $python) {
-          Write-Host "Searching for Python..." -ForegroundColor Yellow
-          
-          $pythonPaths = @(
-            "C:\Python39\python.exe",
-            "C:\Python310\python.exe",
-            "C:\Python311\python.exe",
-            "C:\Python312\python.exe",
-            "C:\Python313\python.exe",
-            "C:\Program Files\Python313\python.exe",
-            "$env:LOCALAPPDATA\Programs\Python\Python39\python.exe",
-            "$env:LOCALAPPDATA\Programs\Python\Python310\python.exe",
-            "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe",
-            "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
-            "$env:LOCALAPPDATA\Programs\Python\Python313\python.exe"
-          )
-          
-          foreach ($path in $pythonPaths) {
-            if (Test-Path $path) {
-              try {
-                $testVer = & $path --version 2>&1
-                if ($testVer -match "Python") {
-                  $python = $path
-                  Write-Host "Using Python: $python" -ForegroundColor Cyan
-                  break
-                }
-              } catch {}
-            }
-          }
-          
-          if (-not $python) {
-            Write-Error "Python not found!"
-            exit 1
-          }
-        }
-        
-        # 确定 spec 文件
+        # 确定使用哪个 spec 文件
         $specFile = if (Test-Path "baal_windows.spec") {
           "baal_windows.spec"
         } elseif (Test-Path "baal.spec") {
@@ -291,74 +139,113 @@ jobs:
           exit 1
         }
         
-        Write-Host "Using spec file: $specFile" -ForegroundColor Yellow
+        Write-Host "Using spec file: $specFile" -ForegroundColor Gray
         
-        # 清理缓存
-        if ($env:APPDATA) {
-          $cacheDir = "$env:APPDATA\pyinstaller"
-          if (Test-Path $cacheDir) {
-            Remove-Item -Path $cacheDir -Recurse -Force -ErrorAction SilentlyContinue
-            Write-Host "Cleaned PyInstaller cache" -ForegroundColor Gray
+        # 清理构建缓存
+        @("build", "dist", "$env:LOCALAPPDATA\pyinstaller") | ForEach-Object {
+          if ($_ -and (Test-Path $_)) {
+            Remove-Item -Path $_ -Recurse -Force -ErrorAction SilentlyContinue
           }
         }
         
         # 运行 PyInstaller
-        Write-Host "Running PyInstaller..." -ForegroundColor Cyan
-        & $python -m PyInstaller --clean --noconfirm $specFile
+        & venv\Scripts\python.exe -m PyInstaller --clean --noconfirm $specFile
         
         if ($LASTEXITCODE -ne 0) {
-          Write-Error "PyInstaller failed with exit code $LASTEXITCODE"
+          Write-Error "Build failed with exit code $LASTEXITCODE"
           exit 1
         }
         
-        # 检查输出
+        # 验证输出
         Write-Host ""
-        Write-Host "Checking output..." -ForegroundColor Yellow
+        Write-Host "Build output:" -ForegroundColor Green
+        Get-ChildItem -Path dist -Filter "*.exe" | ForEach-Object {
+          $sizeMB = [math]::Round($_.Length / 1MB, 2)
+          Write-Host "  ✓ $($_.Name) ($sizeMB MB)" -ForegroundColor Green
+        }
         
-        $exeFiles = Get-ChildItem -Path "dist" -Filter "*.exe" -ErrorAction SilentlyContinue
-        if ($exeFiles) {
-          Write-Host "✓ Build successful!" -ForegroundColor Green
-          foreach ($exe in $exeFiles) {
-            $sizeMB = [math]::Round($exe.Length / 1MB, 2)
-            Write-Host "  - $($exe.Name) ($sizeMB MB)" -ForegroundColor Cyan
+        if (-not (Test-Path "dist\*.exe")) {
+          Write-Error "No executable found in dist directory"
+          exit 1
+        }
+    
+    - name: Create installer (optional)
+      shell: powershell
+      continue-on-error: true
+      run: |
+        Write-Host "Checking for Inno Setup..." -ForegroundColor Yellow
+        
+        $isccPaths = @(
+          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+          "C:\Program Files\Inno Setup 6\ISCC.exe"
+        )
+        
+        $iscc = $isccPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
+        
+        if ($iscc -and (Test-Path "installer\windows\baal_setup.iss")) {
+          Write-Host "Creating installer with Inno Setup..." -ForegroundColor Green
+          & $iscc /Q "installer\windows\baal_setup.iss"
+          
+          if (Test-Path "installer\windows\Output\*.exe") {
+            Write-Host "✓ Installer created successfully" -ForegroundColor Green
           }
         } else {
-          Write-Error "No executable found in dist!"
-          exit 1
+          Write-Host "Inno Setup not found or setup script missing (skipping installer creation)" -ForegroundColor Yellow
         }
     
     - name: Package artifacts
       shell: powershell
       run: |
-        Write-Host "Packaging artifacts..." -ForegroundColor Green
+        Write-Host "Packaging build artifacts..." -ForegroundColor Yellow
         
         # 创建 artifacts 目录
         New-Item -ItemType Directory -Force -Path artifacts | Out-Null
         
-        # 复制 exe 文件
-        Get-ChildItem -Path "dist" -Filter "*.exe" | ForEach-Object {
-          Copy-Item -Path $_.FullName -Destination "artifacts\"
-          Write-Host "  - Copied: $($_.Name)" -ForegroundColor Gray
+        # 复制可执行文件
+        Get-ChildItem -Path dist -Filter "*.exe" | ForEach-Object {
+          Copy-Item -Path $_.FullName -Destination artifacts\
+          Write-Host "  Copied: $($_.Name)" -ForegroundColor Gray
         }
         
-        # 创建 ZIP
+        # 复制安装程序（如果存在）
+        if (Test-Path "installer\windows\Output\*.exe") {
+          Get-ChildItem -Path "installer\windows\Output" -Filter "*.exe" | ForEach-Object {
+            Copy-Item -Path $_.FullName -Destination "artifacts\Setup-$($_.Name)"
+            Write-Host "  Copied installer: $($_.Name)" -ForegroundColor Gray
+          }
+        }
+        
+        # 创建版本信息文件
         $version = if ("${{ github.ref }}" -match "refs/tags/v(.+)") {
           $matches[1]
         } else {
-          "latest"
+          "dev-${{ github.run_number }}"
         }
         
+        @{
+          Version = $version
+          Commit = "${{ github.sha }}"
+          Branch = "${{ github.ref_name }}"
+          BuildTime = (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+          Runner = $env:COMPUTERNAME
+        } | ConvertTo-Json | Set-Content -Path "artifacts\build-info.json"
+        
+        # 创建 ZIP 包
         $zipName = "BaalDesktopPet-Windows-${version}.zip"
-        Write-Host "Creating: $zipName" -ForegroundColor Yellow
+        Write-Host "Creating ZIP: $zipName" -ForegroundColor Green
         
-        Compress-Archive -Path "dist\*" -DestinationPath "artifacts\$zipName" -Force
+        Compress-Archive -Path dist\* -DestinationPath "artifacts\$zipName" -Force
         
-        # 显示最终 artifacts
+        # 显示最终的 artifacts
         Write-Host ""
-        Write-Host "Artifacts:" -ForegroundColor Green
-        Get-ChildItem "artifacts" | ForEach-Object {
-          $sizeMB = [math]::Round($_.Length / 1MB, 2)
-          Write-Host "  - $($_.Name) ($sizeMB MB)" -ForegroundColor Cyan
+        Write-Host "Build artifacts:" -ForegroundColor Green
+        Get-ChildItem artifacts | ForEach-Object {
+          $size = if ($_.Length -ge 1MB) {
+            "$([math]::Round($_.Length / 1MB, 2)) MB"
+          } else {
+            "$([math]::Round($_.Length / 1KB, 2)) KB"
+          }
+          Write-Host "  • $($_.Name) ($size)" -ForegroundColor Gray
         }
     
     - name: Upload artifacts
@@ -367,16 +254,38 @@ jobs:
         name: windows-build-${{ github.run_number }}
         path: artifacts/
         retention-days: 30
+        if-no-files-found: error
     
-    - name: Create Release
+    - name: Create release
       if: startsWith(github.ref, 'refs/tags/v')
       uses: softprops/action-gh-release@v2
       with:
         draft: false
-        prerelease: false
+        prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') }}
         name: Release ${{ github.ref_name }}
+        tag_name: ${{ github.ref_name }}
+        body: |
+          # Baal Desktop Pet ${{ github.ref_name }}
+          
+          ## 📦 Downloads
+          
+          - **Windows Installer**: `Setup-BaalDesktopPet.exe` (Recommended)
+          - **Windows Portable**: `BaalDesktopPet-Windows-${{ github.ref_name }}.zip`
+          
+          ## 🔧 System Requirements
+          
+          - Windows 10/11
+          - No Python installation required (standalone executable)
+          
+          ## 📝 Changelog
+          
+          See commit history for detailed changes.
+          
+          ---
+          *Built on self-hosted runner*
         files: |
           artifacts/*.zip
+          artifacts/Setup-*.exe
           artifacts/*.exe
         fail_on_unmatched_files: false
         generate_release_notes: true
@@ -385,10 +294,14 @@ jobs:
       if: always()
       shell: powershell
       run: |
-        Write-Host "Cleaning up..." -ForegroundColor Green
-        @("build", "dist", "__pycache__") | ForEach-Object {
+        Write-Host "Cleaning up workspace..." -ForegroundColor Yellow
+        
+        # 清理构建文件（保留源代码）
+        @("venv", "build", "dist", "__pycache__", ".pytest_cache") | ForEach-Object {
           if (Test-Path $_) {
             Remove-Item -Path $_ -Recurse -Force -ErrorAction SilentlyContinue
-            Write-Host "  - Cleaned $_" -ForegroundColor Gray
+            Write-Host "  Cleaned: $_" -ForegroundColor Gray
           }
         }
+        
+        Write-Host "✓ Cleanup completed" -ForegroundColor Green
