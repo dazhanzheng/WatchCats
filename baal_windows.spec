@@ -200,11 +200,9 @@ pyz = PYZ(a.pure, a.zipped_data, cipher=None)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
     [],
-    name='WatchCats',
+    exclude_binaries=True,
+    name='Watch Cats',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -221,4 +219,15 @@ exe = EXE(
     version_file=None,
     uac_admin=False,  # 不需要管理员权限
     uac_uiaccess=False
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    name='Watch Cats'
 )
