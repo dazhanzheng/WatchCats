@@ -22,7 +22,8 @@ DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=Output
 OutputBaseFilename=WatchCats-Setup
-SetupIconFile=installer\icons\WatchCats.ico
+; SetupIconFile is optional - comment out if icon doesn't exist
+; SetupIconFile=installer\icons\WatchCats.ico
 AppMutex={#MyAppNameEN}Mutex
 Compression=lzma2/max
 SolidCompression=yes
@@ -45,27 +46,19 @@ MinVersion=10.0.17763
 LicenseFile=LICENSE.txt
 
 [Languages]
-Name: "chinese"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
+; Chinese language file is optional - only use if available
+; Name: "chinese"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 
 [CustomMessages]
-; Chinese messages
-chinese.LaunchProgram=启动 {#MyAppName}
-chinese.CreateDesktopIcon=创建桌面快捷方式(&D)
-chinese.InstallVCRedist=正在安装 Visual C++ 运行库...
-chinese.CheckingDependencies=正在检查系统依赖项...
-chinese.ConfiguringApp=正在配置应用程序...
-chinese.StartupIcon=开机自动启动
-chinese.StartupIconDesc=设置 {#MyAppName} 开机自动启动
-
-; English messages
-english.LaunchProgram=Launch {#MyAppName}
-english.CreateDesktopIcon=Create a &desktop shortcut
-english.InstallVCRedist=Installing Visual C++ Runtime...
-english.CheckingDependencies=Checking system dependencies...
-english.ConfiguringApp=Configuring application...
-english.StartupIcon=Start automatically at Windows startup
-english.StartupIconDesc=Configure {#MyAppName} to start automatically
+; Default English messages
+LaunchProgram=Launch {#MyAppName}
+CreateDesktopIcon=Create a &desktop shortcut
+InstallVCRedist=Installing Visual C++ Runtime...
+CheckingDependencies=Checking system dependencies...
+ConfiguringApp=Configuring application...
+StartupIcon=Start automatically at Windows startup
+StartupIconDesc=Configure {#MyAppName} to start automatically
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
@@ -73,18 +66,19 @@ Name: "startupicon"; Description: "{cm:StartupIcon}"; GroupDescription: "{cm:Add
 
 [Files]
 ; 主程序
-Source: "..\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 
-; 图标文件
-Source: "installer\icons\WatchCats.ico"; DestDir: "{app}"; Flags: ignoreversion
+; 图标文件 (如果存在)
+Source: "installer\icons\WatchCats.ico"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "baal\resources\icon.ico"; DestDir: "{app}"; DestName: "WatchCats.ico"; Flags: ignoreversion skipifsourcedoesntexist
 
 ; PyInstaller 生成的内部文件
-Source: "..\dist\_internal\*"; DestDir: "{app}\_internal"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+Source: "dist\_internal\*"; DestDir: "{app}\_internal"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 ; 资源文件
-Source: "..\baal\resources\*"; DestDir: "{app}\baal\resources"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "..\动作表情拆分\*"; DestDir: "{app}\动作表情拆分"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "..\baal\references\*"; DestDir: "{app}\baal\references"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "baal\resources\*"; DestDir: "{app}\baal\resources"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+Source: "动作表情拆分\*"; DestDir: "{app}\动作表情拆分"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+Source: "baal\references\*"; DestDir: "{app}\baal\references"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 [Dirs]
 ; 创建用户数据目录
