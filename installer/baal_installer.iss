@@ -20,24 +20,42 @@ DisableProgramGroupPage=yes
 ShowLanguageDialog=no
 
 [Languages]
-Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加任务:"; Flags: unchecked
-Name: "startup"; Description: "开机自动启动"; GroupDescription: "附加任务:"; Flags: unchecked
+Name: "desktopicon"; Description: "Create desktop shortcut"; GroupDescription: "Additional tasks:"; Flags: unchecked
+Name: "startup"; Description: "Launch at Windows startup"; GroupDescription: "Additional tasks:"; Flags: unchecked
 
 [Files]
 Source: "..\dist\Watch Cats\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\Watch Cats"; Filename: "{app}\Watch Cats.exe"
-Name: "{group}\卸载 Watch Cats"; Filename: "{uninstallexe}"
+Name: "{group}\Uninstall Watch Cats"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\Watch Cats"; Filename: "{app}\Watch Cats.exe"; Tasks: desktopicon
 Name: "{userstartup}\Watch Cats"; Filename: "{app}\Watch Cats.exe"; Tasks: startup
 
 [Run]
-Filename: "{app}\Watch Cats.exe"; Description: "运行 Watch Cats"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\Watch Cats.exe"; Description: "Launch Watch Cats"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
 Type: filesandordirs; Name: "{userappdata}\BaalPet"
+
+[Code]
+function InitializeSetup(): Boolean;
+var
+  ErrorCode: Integer;
+  UninstallString: String;
+begin
+  Result := True;
+  
+  // Check if already installed
+  if RegQueryStringValue(HKLM, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{#SetupSetting("AppName")}_is1', 'UninstallString', UninstallString) then
+  begin
+    if MsgBox('Watch Cats is already installed. Do you want to uninstall the old version first?', mbConfirmation, MB_YESNO) = IDYES then
+    begin
+      Exec(UninstallString, '/SILENT', '', SW_SHOW, ewWaitUntilTerminated, ErrorCode);
+    end;
+  end;
+end;
