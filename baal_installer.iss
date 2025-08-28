@@ -1,103 +1,220 @@
-; Inno Setup Script for Baal Pet Assistant
+; Inno Setup Script for WatchCats
+; Creates a Windows installer with runtime dependency checks
 
-#define MyAppName "Baal Pet Assistant"
-#define MyAppVersion "1.0.0"
-#define MyAppPublisher "Baal Project"
-#define MyAppExeName "Baal宠物助手.exe"
-#define MyAppURL "https://github.com/yourusername/baal-standalone"
+#define MyAppName "WatchCats"
+#define MyAppNameEN "WatchCats"
+#define MyAppVersion "0.1.3"
+#define MyAppPublisher "WatchCats Project"
+#define MyAppURL "https://github.com/dazhanzheng/WatchCats"
+#define MyAppExeName "WatchCats.exe"
 
 [Setup]
-AppId={{B4D5F8E2-3C9A-4B7D-8E1F-2A3C5D6E7F90}
+AppId={{E7B2A9F1-3C4D-5E6F-8A9B-1C2D3E4F5A6B}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
+AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
-AppSupportURL={#MyAppURL}
-AppUpdatesURL={#MyAppURL}
-DefaultDirName={autopf}\{#MyAppName}
+AppSupportURL={#MyAppURL}/issues
+AppUpdatesURL={#MyAppURL}/releases
+DefaultDirName={autopf}\{#MyAppNameEN}
 DefaultGroupName={#MyAppName}
-AllowNoIcons=yes
-LicenseFile=LICENSE.txt
-; 如果没有 LICENSE 文件，注释掉上面这行
+DisableProgramGroupPage=yes
 OutputDir=Output
-OutputBaseFilename=BaalPetAssistant_Setup
-SetupIconFile=baal\resources\icon.ico
-Compression=lzma2
+OutputBaseFilename=WatchCats-Setup
+SetupIconFile=installer\icons\WatchCats.ico
+AppMutex={#MyAppNameEN}Mutex
+Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 UninstallDisplayIcon={app}\{#MyAppExeName}
+ShowLanguageDialog=yes
+LanguageDetectionMethod=uilanguage
+DisableWelcomePage=no
 DisableDirPage=no
-DisableProgramGroupPage=no
+DisableReadyPage=no
+DisableFinishedPage=no
+VersionInfoVersion={#MyAppVersion}
+VersionInfoCompany={#MyAppPublisher}
+VersionInfoDescription={#MyAppName} 安装程序
+VersionInfoTextVersion={#MyAppVersion}
+VersionInfoCopyright=Copyright (C) 2025 {#MyAppPublisher}
+MinVersion=10.0.17763
+LicenseFile=LICENSE.txt
 
 [Languages]
+Name: "chinese"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
-Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+
+[CustomMessages]
+; Chinese messages
+chinese.LaunchProgram=启动 {#MyAppName}
+chinese.CreateDesktopIcon=创建桌面快捷方式(&D)
+chinese.InstallVCRedist=正在安装 Visual C++ 运行库...
+chinese.CheckingDependencies=正在检查系统依赖项...
+chinese.ConfiguringApp=正在配置应用程序...
+chinese.StartupIcon=开机自动启动
+chinese.StartupIconDesc=设置 {#MyAppName} 开机自动启动
+
+; English messages
+english.LaunchProgram=Launch {#MyAppName}
+english.CreateDesktopIcon=Create a &desktop shortcut
+english.InstallVCRedist=Installing Visual C++ Runtime...
+english.CheckingDependencies=Checking system dependencies...
+english.ConfiguringApp=Configuring application...
+english.StartupIcon=Start automatically at Windows startup
+english.StartupIconDesc=Configure {#MyAppName} to start automatically
 
 [Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked; OnlyBelowVersion: 6.1; Check: not IsAdminInstallMode
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
+Name: "startupicon"; Description: "{cm:StartupIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
-Source: "dist\Baal宠物助手\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-; 包含所有依赖文件和资源
-Source: "dist\Baal宠物助手\_internal\*"; DestDir: "{app}\_internal"; Flags: ignoreversion recursesubdirs createallsubdirs
+; 主程序
+Source: "..\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+
+; 图标文件
+Source: "installer\icons\WatchCats.ico"; DestDir: "{app}"; Flags: ignoreversion
+
+; PyInstaller 生成的内部文件
+Source: "..\dist\_internal\*"; DestDir: "{app}\_internal"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+
+; 资源文件
+Source: "..\baal\resources\*"; DestDir: "{app}\baal\resources"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\动作表情拆分\*"; DestDir: "{app}\动作表情拆分"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\baal\references\*"; DestDir: "{app}\baal\references"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[Dirs]
+; 创建用户数据目录
+Name: "{localappdata}\{#MyAppNameEN}"
+Name: "{localappdata}\{#MyAppNameEN}\logs"
+Name: "{localappdata}\{#MyAppNameEN}\data"
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+; Start menu shortcuts
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\WatchCats.ico"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
-Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: quicklaunchicon
+
+; Desktop shortcut
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon; IconFilename: "{app}\WatchCats.ico"; IconIndex: 0
+
+[Registry]
+; 开机自启动
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#MyAppNameEN}"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: startupicon; Flags: uninsdeletevalue
+
+; 应用设置
+Root: HKCU; Subkey: "Software\{#MyAppPublisher}\{#MyAppNameEN}"; ValueType: string; ValueName: "InstallPath"; ValueData: "{app}"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\{#MyAppPublisher}\{#MyAppNameEN}"; ValueType: string; ValueName: "ConfigPath"; ValueData: "{localappdata}\{#MyAppNameEN}"
+Root: HKCU; Subkey: "Software\{#MyAppPublisher}\{#MyAppNameEN}"; ValueType: string; ValueName: "Version"; ValueData: "{#MyAppVersion}"
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
-
-[UninstallDelete]
-Type: filesandordirs; Name: "{app}"
-Type: filesandordirs; Name: "{userappdata}\BaalPet"
+; 安装后运行
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram}"; Flags: nowait postinstall skipifsilent
 
 [Code]
+// 初始化设置
 function InitializeSetup(): Boolean;
-var
-  ErrorCode: Integer;
 begin
   Result := True;
-  
-  // 检查是否已经在运行
-  if FileExists(ExpandConstant('{userappdata}\BaalPet\lock.pid')) then
-  begin
-    if MsgBox('检测到 Baal Pet Assistant 可能正在运行。' + #13#10 + 
-              '请先关闭程序再继续安装。' + #13#10 + #13#10 +
-              '是否继续安装？', mbConfirmation, MB_YESNO) = IDNO then
-    begin
-      Result := False;
-    end;
-  end;
 end;
 
-function PrepareToInstall(var NeedsRestart: Boolean): String;
+// 安装步骤变化时的操作
+procedure CurStepChanged(CurStep: TSetupStep);
 var
-  ResultCode: Integer;
+  ConfigPath: String;
+  QtConfPath: String;
+  QtConfContent: String;
 begin
-  // 尝试结束可能正在运行的进程
-  Exec('taskkill', '/F /IM Baal宠物助手.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  Result := '';
-end;
-
-procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
-var
-  ResultCode: Integer;
-begin
-  if CurUninstallStep = usUninstall then
+  if CurStep = ssPostInstall then
   begin
-    // 卸载时确保程序已关闭
-    Exec('taskkill', '/F /IM Baal宠物助手.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    // 创建 qt.conf 文件（解决 Qt 插件路径问题）
+    QtConfPath := ExpandConstant('{app}\qt.conf');
+    QtConfContent := '[Paths]' + #13#10 +
+                     'Prefix = _internal/PyQt6/Qt6' + #13#10 +
+                     'Plugins = _internal/PyQt6/Qt6/plugins' + #13#10;
+    SaveStringToFile(QtConfPath, QtConfContent, False);
     
-    // 询问是否删除用户数据
-    if MsgBox('是否删除用户配置和数据？', mbConfirmation, MB_YESNO) = IDYES then
+    // 创建默认配置文件（如果不存在）
+    ConfigPath := ExpandConstant('{localappdata}\{#MyAppNameEN}\config.json');
+    if not FileExists(ConfigPath) then
     begin
-      DelTree(ExpandConstant('{userappdata}\BaalPet'), True, True, True);
+      ForceDirectories(ExtractFilePath(ConfigPath));
+      SaveStringToFile(ConfigPath, '{' + #13#10 +
+                                  '  "version": "' + '{#MyAppVersion}' + '",' + #13#10 +
+                                  '  "first_run": true,' + #13#10 +
+                                  '  "language": "zh_CN",' + #13#10 +
+                                  '  "api_key": "6be4b0c1-8e71-4530-908a-cbe4b48a9a07",' + #13#10 +
+                                  '  "base_url": "https://ark.cn-beijing.volces.com/api/v3",' + #13#10 +
+                                  '  "model": "doubao-seed-1-6-flash-250715"' + #13#10 +
+                                  '}', False);
     end;
   end;
+end;
+
+// 数据迁移函数
+procedure MigrateOldData();
+var
+  OldConfigPath: String;
+  NewConfigPath: String;
+  ResultCode: Integer;
+begin
+  // 定义旧版本路径 (BaalPet in Roaming)
+  OldConfigPath := ExpandConstant('{userappdata}\BaalPet');
+  // 定义新版本路径 (WatchCats in Local)  
+  NewConfigPath := ExpandConstant('{localappdata}\WatchCats');
+  
+  // 检查旧版本目录是否存在
+  if not DirExists(OldConfigPath) then
+  begin
+    Exit;
+  end;
+  
+  // 确保新目录存在
+  if not ForceDirectories(NewConfigPath) then
+  begin
+    Exit;
+  end;
+  
+  // 迁移文件
+  if FileExists(OldConfigPath + '\config.json') and not FileExists(NewConfigPath + '\config.json') then
+  begin
+    FileCopy(OldConfigPath + '\config.json', NewConfigPath + '\config.json', False);
+  end;
+  
+  if FileExists(OldConfigPath + '\chat_history.json') and not FileExists(NewConfigPath + '\conversation_history.json') then
+  begin
+    FileCopy(OldConfigPath + '\chat_history.json', NewConfigPath + '\conversation_history.json', False);
+  end;
+  
+  if FileExists(OldConfigPath + '\conversation_history.json') and not FileExists(NewConfigPath + '\conversation_history.json') then
+  begin
+    FileCopy(OldConfigPath + '\conversation_history.json', NewConfigPath + '\conversation_history.json', False);
+  end;
+  
+  if FileExists(OldConfigPath + '\schedules.json') and not FileExists(NewConfigPath + '\schedules.json') then
+  begin
+    FileCopy(OldConfigPath + '\schedules.json', NewConfigPath + '\schedules.json', False);
+  end;
+  
+  if FileExists(OldConfigPath + '\goals.json') and not FileExists(NewConfigPath + '\supervision.json') then
+  begin
+    FileCopy(OldConfigPath + '\goals.json', NewConfigPath + '\supervision.json', False);
+  end;
+  
+  if FileExists(OldConfigPath + '\supervision.json') and not FileExists(NewConfigPath + '\supervision.json') then
+  begin
+    FileCopy(OldConfigPath + '\supervision.json', NewConfigPath + '\supervision.json', False);
+  end;
+end;
+
+// 安装前的准备
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  NeedsRestart := False;
+  Result := '';
+  
+  // 执行数据迁移
+  MigrateOldData();
 end;

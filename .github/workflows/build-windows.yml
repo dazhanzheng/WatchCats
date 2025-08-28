@@ -46,14 +46,14 @@ jobs:
     - name: Upload Windows Installer
       uses: actions/upload-artifact@v4
       with:
-        name: BaalPetAssistant-Windows-Installer
-        path: Output\BaalPetAssistant_Setup.exe
+        name: WatchCats-Windows-Installer
+        path: Output\WatchCats-Setup.exe
     
     - name: Create Release (if tagged)
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v2
       with:
-        files: Output\BaalPetAssistant_Setup.exe
+        files: Output\WatchCats-Setup.exe
         draft: false
         prerelease: false
       env:
