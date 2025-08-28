@@ -1,10 +1,10 @@
 ; Inno Setup Script for WatchCats
-; Creates a Windows installer with runtime dependency checks
+; 创建 Windows 安装程序
 
-#define MyAppName "WatchCats"
+#define MyAppName "WatchCats 桌面宠物"
 #define MyAppNameEN "WatchCats"
 #define MyAppVersion "0.1.3"
-#define MyAppPublisher "WatchCats Project"
+#define MyAppPublisher "WatchCats 项目组"
 #define MyAppURL "https://github.com/dazhanzheng/WatchCats"
 #define MyAppExeName "WatchCats.exe"
 
@@ -22,8 +22,8 @@ DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=Output
 OutputBaseFilename=WatchCats-Setup
-; SetupIconFile is optional - comment out if icon doesn't exist
-; SetupIconFile=installer\icons\WatchCats.ico
+; 使用 baallogo.png 转换的图标
+SetupIconFile=baal\resources\watchcats_hq.ico
 AppMutex={#MyAppNameEN}Mutex
 Compression=lzma2/max
 SolidCompression=yes
@@ -46,19 +46,27 @@ MinVersion=10.0.17763
 LicenseFile=LICENSE.txt
 
 [Languages]
+Name: "chinese"; MessagesFile: "chinesesimp.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
-; Chinese language file is optional - only use if available
-; Name: "chinese"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 
 [CustomMessages]
-; Default English messages
-LaunchProgram=Launch {#MyAppName}
-CreateDesktopIcon=Create a &desktop shortcut
-InstallVCRedist=Installing Visual C++ Runtime...
-CheckingDependencies=Checking system dependencies...
-ConfiguringApp=Configuring application...
-StartupIcon=Start automatically at Windows startup
-StartupIconDesc=Configure {#MyAppName} to start automatically
+; 中文消息
+chinese.LaunchProgram=启动 {#MyAppName}
+chinese.CreateDesktopIcon=创建桌面快捷方式(&D)
+chinese.InstallVCRedist=正在安装 Visual C++ 运行库...
+chinese.CheckingDependencies=正在检查系统依赖项...
+chinese.ConfiguringApp=正在配置应用程序...
+chinese.StartupIcon=开机自动启动
+chinese.StartupIconDesc=设置 {#MyAppName} 开机自动启动
+
+; English messages
+english.LaunchProgram=Launch {#MyAppName}
+english.CreateDesktopIcon=Create a &desktop shortcut
+english.InstallVCRedist=Installing Visual C++ Runtime...
+english.CheckingDependencies=Checking system dependencies...
+english.ConfiguringApp=Configuring application...
+english.StartupIcon=Start automatically at Windows startup
+english.StartupIconDesc=Configure {#MyAppName} to start automatically
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
@@ -68,9 +76,9 @@ Name: "startupicon"; Description: "{cm:StartupIcon}"; GroupDescription: "{cm:Add
 ; 主程序
 Source: "dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 
-; 图标文件 (如果存在)
-Source: "installer\icons\WatchCats.ico"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "baal\resources\icon.ico"; DestDir: "{app}"; DestName: "WatchCats.ico"; Flags: ignoreversion skipifsourcedoesntexist
+; 图标文件 - 使用高质量图标
+Source: "baal\resources\watchcats_hq.ico"; DestDir: "{app}"; DestName: "WatchCats.ico"; Flags: ignoreversion
+Source: "baal\resources\baallogo.png"; DestDir: "{app}"; Flags: ignoreversion
 
 ; PyInstaller 生成的内部文件
 Source: "dist\_internal\*"; DestDir: "{app}\_internal"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
