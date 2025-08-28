@@ -25,14 +25,13 @@ jobs:
     - name: Create virtual environment and install dependencies
       run: |
         python -m venv venv
-        .\venv\Scripts\activate
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
+        .\venv\Scripts\python.exe -m pip install --upgrade pip
+        .\venv\Scripts\python.exe -m pip install -r requirements.txt
+        .\venv\Scripts\python.exe -m pip install pyinstaller
     
     - name: Build with PyInstaller
       run: |
-        .\venv\Scripts\activate
-        pyinstaller --clean --noconfirm baal_windows.spec
+        .\venv\Scripts\python.exe -m PyInstaller --clean --noconfirm baal_windows.spec
     
     - name: Download and Install Inno Setup
       run: |
