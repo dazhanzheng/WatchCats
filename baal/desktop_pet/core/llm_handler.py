@@ -7,6 +7,7 @@ LLM 处理器
 
 import asyncio
 import time
+import threading
 from typing import Optional, AsyncGenerator, List, Dict, Any
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
@@ -105,6 +106,14 @@ class LLMHandler:
         
         # 初始化配置管理器用于历史记录存储
         self.config_manager = ConfigManager()
+        
+        # 自动保存相关
+        self.auto_save_enabled = True
+        self.auto_save_interval = 60  # 60秒后自动保存
+        self.auto_save_timer = None
+        self.auto_save_lock = threading.Lock()
+        self.last_save_time = time.time()
+        self.min_save_interval = 10  # 最小保存间隔10秒，防止频繁保存
         
         # 尝试加载历史对话记录
         self._load_conversation_history()
@@ -496,6 +505,9 @@ class LLMHandler:
         # 通知完成
         self._notify_status("done")
         
+        # 安排自动保存
+        self._schedule_auto_save()
+        
         total_time = time.time() - overall_start
         self.logger.info(f"Streaming chat completed in {total_time:.3f}s")
     
@@ -521,6 +533,9 @@ class LLMHandler:
         try:
             response = llm.invoke(self.messages)
             self.messages.append(response)
+            
+            # 安排自动保存
+            self._schedule_auto_save()
             
             self.logger.info(f"Sync chat completed, response length: {len(response.content)}")
             self.logger.debug(f"Response preview: {response.content[:100]}...")
@@ -619,6 +634,7 @@ class LLMHandler:
                 success = self.config_manager.save_conversation_history(messages_to_save)
                 if success:
                     self.logger.info(f"Saved {len(messages_to_save)} messages to history")
+                    self.last_save_time = time.time()  # 更新最后保存时间
                 else:
                     self.logger.warning("Failed to save conversation history")
                 return success
@@ -630,9 +646,67 @@ class LLMHandler:
             self.logger.error(f"Error saving conversation history: {e}", exc_info=True)
             return False
     
+    def _schedule_auto_save(self):
+        """安排自动保存"""
+        if not self.auto_save_enabled:
+            return
+        
+        with self.auto_save_lock:
+            # 如果已有定时器，先取消
+            if self.auto_save_timer:
+                self.auto_save_timer.cancel()
+            
+            # 创建新的定时器
+            self.auto_save_timer = threading.Timer(self.auto_save_interval, self._auto_save)
+            self.auto_save_timer.daemon = True  # 设置为守护线程
+            self.auto_save_timer.start()
+            self.logger.debug(f"Auto-save scheduled in {self.auto_save_interval} seconds")
+    
+    def _auto_save(self):
+        """执行自动保存"""
+        try:
+            current_time = time.time()
+            # 检查最小保存间隔，防止频繁保存
+            if current_time - self.last_save_time >= self.min_save_interval:
+                self.logger.debug("Performing auto-save...")
+                success = self.save_conversation_history()
+                if success:
+                    self.logger.debug("Auto-save completed successfully")
+                else:
+                    self.logger.warning("Auto-save failed")
+            else:
+                self.logger.debug(f"Skipping auto-save, last save was {current_time - self.last_save_time:.1f}s ago")
+        except Exception as e:
+            self.logger.error(f"Auto-save error: {e}", exc_info=True)
+        finally:
+            # 清理定时器引用
+            with self.auto_save_lock:
+                self.auto_save_timer = None
+    
+    def trigger_immediate_save(self):
+        """立即触发保存（用于重要时刻）"""
+        try:
+            current_time = time.time()
+            # 检查最小保存间隔
+            if current_time - self.last_save_time >= self.min_save_interval:
+                self.logger.debug("Triggering immediate save...")
+                return self.save_conversation_history()
+            else:
+                self.logger.debug(f"Immediate save skipped, last save was {current_time - self.last_save_time:.1f}s ago")
+                return True
+        except Exception as e:
+            self.logger.error(f"Immediate save error: {e}", exc_info=True)
+            return False
+    
     def clear_conversation_history(self):
         """清除对话历史"""
         try:
+            # 取消自动保存定时器
+            with self.auto_save_lock:
+                if self.auto_save_timer:
+                    self.auto_save_timer.cancel()
+                    self.auto_save_timer = None
+            
             # 清除内存中的历史
             self.messages = [self.messages[0]]  # 只保留系统消息
             
@@ -654,6 +728,45 @@ class LLMHandler:
         except Exception as e:
             self.logger.error(f"Error clearing conversation history: {e}", exc_info=True)
             return False
+    
+    def cleanup(self):
+        """清理资源（在程序退出时调用）"""
+        try:
+            # 取消自动保存定时器
+            with self.auto_save_lock:
+                if self.auto_save_timer:
+                    self.auto_save_timer.cancel()
+                    self.auto_save_timer = None
+            
+            # 执行最后一次保存
+            self.save_conversation_history()
+            self.logger.info("LLMHandler cleanup completed")
+            
+        except Exception as e:
+            self.logger.error(f"Error during cleanup: {e}", exc_info=True)
+    
+    def add_supervision_reminder(self, message: str):
+        """添加监督提醒到对话历史并触发保存
+        
+        Args:
+            message: 监督提醒消息
+        """
+        try:
+            # 添加到对话历史
+            ai_msg = AIMessage(content=message)
+            self.messages.append(ai_msg)
+            
+            # 同步到assistant的历史
+            if hasattr(self, 'assistant'):
+                self.assistant.conversation_history.append(ai_msg)
+            
+            self.logger.info(f"Supervision reminder added to history: {message[:50]}...")
+            
+            # 立即触发保存（监督提醒属于重要消息）
+            self.trigger_immediate_save()
+            
+        except Exception as e:
+            self.logger.error(f"Failed to add supervision reminder: {e}", exc_info=True)
     
     def has_conversation_history(self) -> bool:
         """检查是否有对话历史"""

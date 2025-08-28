@@ -523,10 +523,6 @@ class PetWindow(QWidget):
         settings_action = tray_menu.addAction("设置")
         settings_action.triggered.connect(self._show_settings)
         
-        # 分类管理
-        category_action = tray_menu.addAction("分类管理")
-        category_action.triggered.connect(self._show_category_manager)
-        
         # 开发者模式（可通过配置控制显示）
         config = self.config_manager.get_config()
         show_developer_mode = config.get('show_developer_mode', True)  # 默认显示
@@ -996,32 +992,6 @@ class PetWindow(QWidget):
             self.chat_bubble.hide_summary_hint()
             self.logger.debug("Summary hint hidden")
     
-    def _show_category_manager(self):
-        """显示分类管理对话框"""
-        try:
-            from .category_dialog import CategoryDialog
-            
-            dialog = CategoryDialog(self)
-            
-            # 连接分类更新信号
-            dialog.categories_updated.connect(self._on_categories_updated)
-            
-            dialog.exec()
-        except Exception as e:
-            self.logger.error(f"显示分类管理对话框失败: {e}")
-            import traceback
-            traceback.print_exc()
-    
-    def _on_categories_updated(self):
-        """分类规则更新时的回调"""
-        self.logger.info("应用分类规则已更新")
-        # 通知监督模式重新加载分类
-        if hasattr(self, 'supervision_mode'):
-            try:
-                # 监督模式可以在下次评估时自动使用新的分类
-                self.logger.info("分类规则将在下次监督评估时生效")
-            except Exception as e:
-                self.logger.error(f"更新监督模式分类失败: {e}")
     
     def _show_developer_console(self):
         """显示开发者控制台"""
@@ -1376,12 +1346,7 @@ class PetWindow(QWidget):
     
     def _quit_application(self):
         """完全退出应用程序"""
-        # 保存对话历史
-        if hasattr(self, 'llm_handler') and self.llm_handler:
-            self.logger.info("Saving conversation history before quit")
-            self.llm_handler.save_conversation_history()
-        
-        # 清理所有资源
+        # 清理所有资源（包括保存对话历史）
         self._cleanup_resources()
         
         # 停止所有异步任务
@@ -1445,10 +1410,10 @@ class PetWindow(QWidget):
     
     def _hide_to_tray(self):
         """隐藏到系统托盘"""
-        # 保存对话历史
+        # 触发立即保存（隐藏到托盘是一个重要时刻）
         if hasattr(self, 'llm_handler') and self.llm_handler:
-            self.logger.info("Saving conversation history before hiding to tray")
-            self.llm_handler.save_conversation_history()
+            self.logger.info("Triggering immediate save before hiding to tray")
+            self.llm_handler.trigger_immediate_save()
         
         # 保存位置
         self._save_position()
@@ -1627,11 +1592,17 @@ class PetWindow(QWidget):
     
     def _show_supervision_dialog(self):
         """显示监督模式设置对话框"""
+        # 加载当前的工作软件列表
+        from ..core.category_manager import CategoryManager
+        category_manager = CategoryManager()
+        work_apps = category_manager.get_work_apps()
+        
         dialog = SupervisionDialog(
             self,
             current_goal=self.supervision_mode.long_term_goal,
             current_tasks=self.supervision_mode.short_term_goals,
-            is_supervision_active=self.supervision_mode.is_active
+            is_supervision_active=self.supervision_mode.is_active,
+            work_apps=work_apps
         )
         dialog.supervision_started.connect(self._start_supervision)
         dialog.exec()
@@ -1653,20 +1624,33 @@ class PetWindow(QWidget):
             self._start_bubble_auto_hide_timer(30000)
         else:
             # 显示监督设置对话框
+            # 加载当前的工作软件列表
+            from ..core.category_manager import CategoryManager
+            category_manager = CategoryManager()
+            work_apps = category_manager.get_work_apps()
+            
             dialog = SupervisionDialog(
                 self,
                 current_goal=self.supervision_mode.long_term_goal,
                 current_tasks=self.supervision_mode.short_term_goals,
-                is_supervision_active=self.supervision_mode.is_active
+                is_supervision_active=self.supervision_mode.is_active,
+                work_apps=work_apps
             )
             dialog.supervision_started.connect(self._start_supervision)
             dialog.exec()
     
-    def _start_supervision(self, long_term_goal: str, short_term_goals: list):
+    def _start_supervision(self, long_term_goal: str, short_term_goals: list, work_apps: list = None):
         """启动或更新监督模式"""
-        # 保存目标和任务，以便配置完成后使用
+        # 保存目标、任务和工作软件，以便配置完成后使用
         self._pending_supervision_goal = long_term_goal
         self._pending_supervision_tasks = short_term_goals
+        self._pending_work_apps = work_apps or []
+        
+        # 保存工作软件列表
+        if work_apps:
+            from ..core.category_manager import CategoryManager
+            category_manager = CategoryManager()
+            category_manager.set_work_apps(work_apps)
         
         # 如果监督模式已经在运行，只更新目标
         if self.supervision_mode.is_active:
@@ -1857,13 +1841,20 @@ class PetWindow(QWidget):
         self.chat_bubble.show_message(message, duration=duration)
         
         # 将监督提醒加入到聊天记录中
-        # 监督提醒作为AI消息记录
-        if hasattr(self, 'llm_assistant') and self.llm_assistant:
+        # 使用 llm_handler 的新方法来添加监督提醒并自动保存
+        if hasattr(self, 'llm_handler') and self.llm_handler:
+            try:
+                self.llm_handler.add_supervision_reminder(message)
+                logger.info(f"监督提醒已加入聊天记录并安排保存: {message[:50]}...")
+            except Exception as e:
+                logger.warning(f"无法将监督提醒加入聊天记录: {e}")
+        # 兼容旧的 llm_assistant 方式
+        elif hasattr(self, 'llm_assistant') and self.llm_assistant:
             try:
                 from langchain_core.messages import AIMessage
                 supervision_msg = AIMessage(content=message)
                 self.llm_assistant.conversation_history.append(supervision_msg)
-                logger.info(f"监督提醒已加入聊天记录: {message[:50]}...")
+                logger.info(f"监督提醒已加入聊天记录（旧方式）: {message[:50]}...")
             except Exception as e:
                 logger.warning(f"无法将监督提醒加入聊天记录: {e}")
     
@@ -1902,6 +1893,11 @@ class PetWindow(QWidget):
         # 停止监督模式
         if hasattr(self, 'supervision_mode') and self.supervision_mode:
             self.supervision_mode.stop_supervision()
+        
+        # 清理 LLM handler 资源并保存对话
+        if hasattr(self, 'llm_handler') and self.llm_handler:
+            self.logger.info("Cleaning up LLM handler and saving conversation...")
+            self.llm_handler.cleanup()
     
     def closeEvent(self, event):
         """关闭事件"""

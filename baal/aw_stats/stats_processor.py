@@ -109,26 +109,22 @@ class StatsProcessor:
             self.categories = custom_categories
             self.productivity_map = {}
         elif use_user_categories:
-            # 尝试加载用户自定义分类
+            # 尝试加载用户自定义的工作软件列表
             try:
                 from ..desktop_pet.core.category_manager import CategoryManager
-                category_manager = CategoryManager()
-                user_rules = category_manager.get_aw_transform_rules()
-                
-                # 合并用户规则和默认规则
-                # 用户规则优先（放在前面，先匹配）
-                self.categories = user_rules + self.DEFAULT_CATEGORIES
-                self.logger.info(f"加载了 {len(user_rules)} 个用户分类规则")
-                
-                # 保存生产力分类映射
-                self.productivity_map = category_manager.get_productivity_classification()
+                self.category_manager = CategoryManager()
+                self.logger.info(f"加载了 {len(self.category_manager.get_work_apps())} 个工作软件")
             except Exception as e:
-                self.logger.warning(f"加载用户分类失败，使用默认分类: {e}")
-                self.categories = self.DEFAULT_CATEGORIES
-                self.productivity_map = {}
+                self.logger.warning(f"加载工作软件管理器失败: {e}")
+                self.category_manager = None
+            
+            # 使用默认分类规则（简化后不再使用复杂的aw_transform规则）
+            self.categories = self.DEFAULT_CATEGORIES
+            self.productivity_map = {}
         else:
             self.categories = self.DEFAULT_CATEGORIES
             self.productivity_map = {}
+            self.category_manager = None
         self.logger.info(f"Initializing StatsProcessor (client_name={client_name}, testing={testing})")
         
         try:
@@ -714,9 +710,10 @@ class StatsProcessor:
         Returns:
             生产力分析结果
         """
-        category_stats = self.get_category_stats(hours)
+        # 获取原始事件数据而不是分类统计
+        events = self._get_events_for_period(hours)
         
-        if not category_stats["categories"]:
+        if not events:
             return {
                 "productive_time": timedelta(0),
                 "unproductive_time": timedelta(0),
@@ -725,28 +722,40 @@ class StatsProcessor:
                 "analysis": "暂无活动数据"
             }
         
-        # 定义生产力分类关键词
-        productive_keywords = ["工作", "编程", "文档", "笔记", "设计", "学习", "AI工具"]
-        unproductive_keywords = ["娱乐", "游戏", "视频", "音乐", "社交媒体", "购物"]
+        # 加载工作软件列表
+        work_apps = []
+        if hasattr(self, 'category_manager') and self.category_manager:
+            work_apps = self.category_manager.get_work_apps()
+        
+        # 定义生产力分类关键词（作为默认）
+        productive_keywords = ["工作", "编程", "文档", "笔记", "设计", "学习", "AI工具", "code", "vscode", "pycharm", "intellij"]
+        unproductive_keywords = ["娱乐", "游戏", "视频", "音乐", "社交媒体", "购物", "bilibili", "youtube", "netflix"]
         
         productive_time = timedelta(0)
         unproductive_time = timedelta(0)
         neutral_time = timedelta(0)
         
-        for cat in category_stats["categories"]:
-            category_name = cat["name"]
-            duration = cat["duration"]
+        # 遍历事件，根据应用名称判断生产力
+        for event in events:
+            app_name = event.data.get("app", "")
+            duration = event.duration
             
-            # 首先检查用户自定义的生产力分类
-            if hasattr(self, 'productivity_map') and category_name in self.productivity_map:
-                if self.productivity_map[category_name]:
-                    productive_time += duration
-                else:
-                    unproductive_time += duration
+            # 检查是否为工作软件
+            is_work_app = False
+            if work_apps and app_name:
+                app_lower = app_name.lower()
+                for work_app in work_apps:
+                    if work_app.lower() in app_lower or app_lower in work_app.lower():
+                        is_work_app = True
+                        break
+            
+            if is_work_app:
+                productive_time += duration
             else:
                 # 使用默认关键词判断
-                is_productive = any(keyword in category_name for keyword in productive_keywords)
-                is_unproductive = any(keyword in category_name for keyword in unproductive_keywords)
+                app_lower = app_name.lower()
+                is_productive = any(keyword.lower() in app_lower for keyword in productive_keywords)
+                is_unproductive = any(keyword.lower() in app_lower for keyword in unproductive_keywords)
                 
                 if is_productive:
                     productive_time += duration
@@ -755,7 +764,7 @@ class StatsProcessor:
                 else:
                     neutral_time += duration
         
-        total_time = category_stats["total_duration"]
+        total_time = productive_time + unproductive_time + neutral_time
         productive_percentage = (productive_time.total_seconds() / total_time.total_seconds() * 100) if total_time.total_seconds() > 0 else 0
         
         # 生成分析

@@ -75,13 +75,15 @@ baal-standalone/
 │   ├── 巴力2.gif           # 基础动画
 │   └── *.png               # 7 种表情图片
 ├── scripts/                # 构建和实用脚本
-│   └── dmgbuild-settings.py # DMG 创建配置
+│   ├── dmgbuild-settings.py # DMG 创建配置
+│   └── create_multisize_ico.py # 多尺寸图标生成
+├── installer/              # Windows 安装程序
+│   └── baal_installer.iss # Inno Setup 配置
 ├── venv/                   # Python 3.9 虚拟环境
 ├── run_desktop_pet.py      # 主入口脚本
 ├── build.sh               # macOS 自动化构建脚本
 ├── build_macos.sh         # 增强 macOS 构建脚本
-├── build_windows.ps1      # Windows PowerShell 构建脚本
-├── build_windows.bat      # Windows 批处理构建脚本
+├── build_windows.ps1      # Windows PowerShell 构建脚本（推荐）
 ├── fix_app.sh             # 应用修复脚本
 ├── baal.spec              # 通用 PyInstaller 配置
 ├── baal_macos.spec        # macOS 专用配置
@@ -124,7 +126,6 @@ venv\Scripts\activate     # Windows
 
 # Windows 构建
 .\build_windows.ps1         # PowerShell 脚本（推荐）
-.\build_windows.bat         # 批处理脚本（备选）
 
 # 手动 PyInstaller 构建
 ./venv/bin/pyinstaller --clean --noconfirm baal.spec        # 通用
@@ -473,10 +474,23 @@ dmgbuild -s scripts/dmgbuild-settings.py -D app=dist/Watch\ Cats.app "Watch Cats
 
 ---
 
-*最后更新: 2025-08-13*
+*最后更新: 2025-08-28*
 *由 Claude Code 维护*
 
 ## 更新日志
+
+### 2025-08-28
+- **大规模代码清理**: 删除40+个垃圾文件，减少项目体积约850KB
+  - 移除17个测试文件（test_*.py）
+  - 删除13个调试和修复脚本（debug_*.py, *_fix.py等）
+  - 整合4个重复的图标转换脚本，保留最完整的版本
+  - 清理6个重复的构建脚本（保留PowerShell版本）
+  - 删除2个低质量图标文件
+- **项目结构优化**: 
+  - 简化构建脚本，统一使用PowerShell（Windows）
+  - 保留单一的图标生成工具（scripts/create_multisize_ico.py）
+  - 移除所有临时和调试相关文件
+- **文档更新**: 更新 CLAUDE.md 反映清理后的项目状态
 
 ### 2025-08-13
 - **代码清理**: 删除12个重复和无用的文件

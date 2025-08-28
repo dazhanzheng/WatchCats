@@ -16,9 +16,9 @@ class SupervisionDialog(QDialog):
     """监督模式设置对话框"""
     
     # 信号：当用户确认设置时发出
-    supervision_started = pyqtSignal(str, list)  # long_term_goal, short_term_goals
+    supervision_started = pyqtSignal(str, list, list)  # long_term_goal, short_term_goals, work_apps
     
-    def __init__(self, parent=None, current_goal="", current_tasks=None, is_supervision_active=False):
+    def __init__(self, parent=None, current_goal="", current_tasks=None, is_supervision_active=False, work_apps=None):
         """初始化对话框
         
         Args:
@@ -26,11 +26,13 @@ class SupervisionDialog(QDialog):
             current_goal: 当前的长期目标
             current_tasks: 当前的短期目标列表
             is_supervision_active: 监督模式是否正在运行
+            work_apps: 工作软件列表
         """
         super().__init__(parent)
         self.long_term_goal = current_goal
         self.short_term_goals = current_tasks or []
         self.is_supervision_active = is_supervision_active
+        self.work_apps = work_apps or []
         self.init_ui()
         
         # 如果有现有设置，加载它们
@@ -38,6 +40,8 @@ class SupervisionDialog(QDialog):
             self.long_term_edit.setText(self.long_term_goal)
         for goal in self.short_term_goals:
             self.short_term_list.addItem(goal)
+        for app in self.work_apps:
+            self.work_apps_list.addItem(app)
     
     def init_ui(self):
         """初始化UI"""
@@ -206,6 +210,67 @@ class SupervisionDialog(QDialog):
         short_term_group.setLayout(short_term_layout)
         layout.addWidget(short_term_group)
         
+        # 工作软件列表组
+        work_apps_group = QGroupBox("💼 工作软件")
+        work_apps_layout = QVBoxLayout()
+        
+        work_apps_label = QLabel("添加您用于工作的软件（如 VSCode、飞书等）：")
+        work_apps_layout.addWidget(work_apps_label)
+        
+        # 工作软件输入
+        app_input_layout = QHBoxLayout()
+        self.app_input = QLineEdit()
+        self.app_input.setPlaceholderText("输入软件名称，然后点击添加")
+        self.app_input.returnPressed.connect(self.add_work_app)
+        app_input_layout.addWidget(self.app_input)
+        
+        self.add_app_button = QPushButton("➕ 添加")
+        self.add_app_button.setStyleSheet("""
+            QPushButton {
+                background-color: #3498db;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 5px 15px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #2980b9;
+            }
+            QPushButton:pressed {
+                background-color: #21618c;
+            }
+        """)
+        self.add_app_button.clicked.connect(self.add_work_app)
+        app_input_layout.addWidget(self.add_app_button)
+        
+        work_apps_layout.addLayout(app_input_layout)
+        
+        # 工作软件列表
+        self.work_apps_list = QListWidget()
+        self.work_apps_list.setMaximumHeight(100)
+        work_apps_layout.addWidget(self.work_apps_list)
+        
+        # 删除按钮
+        self.remove_app_button = QPushButton("🗑 删除选中的软件")
+        self.remove_app_button.setStyleSheet("""
+            QPushButton {
+                background-color: #e74c3c;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 5px 15px;
+            }
+            QPushButton:hover {
+                background-color: #c0392b;
+            }
+        """)
+        self.remove_app_button.clicked.connect(self.remove_work_app)
+        work_apps_layout.addWidget(self.remove_app_button)
+        
+        work_apps_group.setLayout(work_apps_layout)
+        layout.addWidget(work_apps_group)
+        
         # 按钮栏
         button_layout = QHBoxLayout()
         button_layout.addStretch()
@@ -293,6 +358,28 @@ class SupervisionDialog(QDialog):
         if ok and new_text.strip():
             current_item.setText(new_text.strip())
     
+    def add_work_app(self):
+        """添加工作软件到列表"""
+        app = self.app_input.text().strip()
+        if app:
+            # 检查是否已存在
+            for i in range(self.work_apps_list.count()):
+                if self.work_apps_list.item(i).text() == app:
+                    QMessageBox.information(self, "提示", f"软件 '{app}' 已存在")
+                    return
+            # 限制工作软件数量
+            if self.work_apps_list.count() >= 20:
+                QMessageBox.information(self, "提示", "工作软件最多20个")
+                return
+            self.work_apps_list.addItem(app)
+            self.app_input.clear()
+    
+    def remove_work_app(self):
+        """从列表中删除选中的工作软件"""
+        current_item = self.work_apps_list.currentItem()
+        if current_item:
+            self.work_apps_list.takeItem(self.work_apps_list.row(current_item))
+    
     # 兼容旧方法名
     def add_task(self):
         self.add_goal()
@@ -322,8 +409,13 @@ class SupervisionDialog(QDialog):
             if reply != QMessageBox.StandardButton.Yes:
                 return
         
+        # 获取所有工作软件
+        work_apps = []
+        for i in range(self.work_apps_list.count()):
+            work_apps.append(self.work_apps_list.item(i).text())
+        
         # 发出信号并关闭对话框
-        self.supervision_started.emit(long_term_goal, short_term_goals)
+        self.supervision_started.emit(long_term_goal, short_term_goals, work_apps)
         self.accept()
 
 
