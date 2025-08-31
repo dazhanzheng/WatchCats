@@ -84,6 +84,7 @@ from ..core import ConfigManager, LLMHandler
 from ..core.persona_manager import PersonaLevel, PersonaManager
 from ..core.emotion_manager import EmotionManager
 from ..core.preset_responses import PresetResponseManager
+from ..core.proactive_dialogue_manager import get_dialogue_manager, DialogueType
 from ..core.logger_config import get_logger, log_performance, log_ui_event
 from ..supervision_mode import SupervisionMode
 
@@ -276,6 +277,12 @@ class PetWindow(QWidget):
         self.bubble_auto_hide_timer = QTimer()
         self.bubble_auto_hide_timer.timeout.connect(self._auto_hide_bubble)
         self.bubble_auto_hide_timer.setSingleShot(True)  # 单次触发
+        
+        # 初始化主动对话管理器
+        self.dialogue_manager = get_dialogue_manager()
+        self.dialogue_manager.trigger_dialogue.connect(self._on_proactive_dialogue)
+        self.dialogue_manager.initialize_aw_client()  # 初始化AW客户端
+        self.logger.info("Proactive dialogue manager initialized")
         
         # 连接信号
         self.supervision_mode.reminder_needed.connect(self._on_supervision_reminder)
@@ -838,6 +845,9 @@ class PetWindow(QWidget):
             # 双击左键直接唤出聊天窗口
             self.logger.info("Double click event - showing chat bubble")
             
+            # 通知对话管理器有用户活动
+            self.dialogue_manager.on_user_activity()
+            
             # 使用状态感知系统
             from ..core.state_awareness import get_state_awareness
             from ..core.state_update_manager import get_update_manager
@@ -933,6 +943,9 @@ class PetWindow(QWidget):
     def _on_bubble_message_sent(self, user_input: str):
         """处理从气泡发送的消息"""
         self.logger.info(f"Message sent from bubble: {user_input[:50]}...")
+        
+        # 通知对话管理器有用户活动
+        self.dialogue_manager.on_user_activity()
         
         # 重置自动隐藏计时器（用户有交互）
         self._reset_bubble_auto_hide_timer()
@@ -1814,6 +1827,51 @@ class PetWindow(QWidget):
             self.emotion_reset_timer.start(20000)  # 20秒
             self.logger.debug("用户交互，重置表情计时器")
     
+    def _on_proactive_dialogue(self, dialogue_type: str, message: str):
+        """处理主动对话触发"""
+        self.logger.info(f"Proactive dialogue triggered - type: {dialogue_type}")
+        
+        # 获取对话上下文
+        from ..core.proactive_dialogue_manager import DialogueType
+        context = self.dialogue_manager.get_dialogue_context(DialogueType(dialogue_type))
+        
+        # 格式化消息
+        formatted_message = self.dialogue_manager.format_message_with_context(message, context)
+        
+        # 显示聊天气泡
+        if self.chat_bubble:
+            self.chat_bubble.show()
+            self.chat_bubble.activateWindow()
+            self.chat_bubble.raise_()
+            
+            # 设置主动对话消息
+            self.chat_bubble.set_proactive_message(formatted_message)
+            
+            # 根据对话类型设置表情
+            if dialogue_type == DialogueType.GREETING.value:
+                self._switch_emotion("<#2>")  # 开心
+            elif dialogue_type == DialogueType.IDLE_CARE.value:
+                self._switch_emotion("<#4>")  # 困惑
+            elif dialogue_type == DialogueType.AFK_RETURN.value:
+                self._switch_emotion("<#6>")  # 兴奋
+            elif dialogue_type == DialogueType.STATE_TRANSITION.value:
+                self._switch_emotion("<#5>")  # 正常
+            elif dialogue_type == DialogueType.RANDOM_CHAT.value:
+                # 随机表情
+                import random
+                emotions = ["<#2>", "<#5>", "<#6>"]
+                self._switch_emotion(random.choice(emotions))
+            
+            # 调整位置
+            self._adjust_bubble_position()
+            
+            # 设置自动隐藏（主动对话30秒后自动隐藏）
+            self.bubble_auto_hide_timer.stop()
+            self.bubble_auto_hide_timer.start(30000)
+        
+        # 记录主动对话
+        self.logger.info(f"Proactive dialogue shown: {formatted_message[:100]}...")
+    
     def _on_supervision_reminder(self, context: dict):
         """处理监督模式提醒"""
         # Windows特殊处理：确保窗口从最小化或隐藏状态恢复
@@ -1957,6 +2015,9 @@ class PetWindow(QWidget):
     def __del__(self):
         """析构函数，确保资源清理"""
         try:
+            # 清理对话管理器
+            if hasattr(self, 'dialogue_manager'):
+                self.dialogue_manager.cleanup()
             self._cleanup_resources()
         except:
             pass  # 忽略析构时的错误

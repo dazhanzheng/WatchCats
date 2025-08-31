@@ -599,6 +599,27 @@ class ChatBubble(QWidget):
         # 只更新显示，不重绘
         self._update_display()
     
+    def set_proactive_message(self, message: str):
+        """设置主动对话消息
+        
+        Args:
+            message: 主动对话消息内容
+        """
+        self.logger.info(f"Setting proactive message: {message[:50]}...")
+        
+        # 添加到对话历史
+        self.conversation_history.append(("baal", message))
+        
+        # 显示消息
+        self.show_message(message, msg_type="baal")
+        
+        # 启用输入框（允许用户回复）
+        self.input_text.setEnabled(True)
+        self.input_text.setFocus()
+        
+        # 发出用户交互信号
+        self.user_interaction.emit()
+    
     def show_summary_hint(self, hint_text: str):
         """显示总结提示
         
