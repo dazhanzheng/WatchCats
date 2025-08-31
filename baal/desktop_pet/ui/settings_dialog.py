@@ -491,7 +491,16 @@ class SettingsDialog(QDialog):
         config['pet_size'] = self.size_slider.value()
         
         # 保存人设设置
-        config['persona_level'] = self.persona_combo.currentData()
+        persona_level = self.persona_combo.currentData()
+        config['persona_level'] = persona_level
+        
+        # 更新主动对话管理器的人设
+        from ..core.persona_manager import PersonaLevel
+        from ..core.proactive_dialogue_manager import update_persona_in_dialogue_manager
+        try:
+            update_persona_in_dialogue_manager(PersonaLevel(persona_level))
+        except Exception as e:
+            print(f"更新主动对话管理器人设失败: {e}")
         
         # 尝试保存配置（传入修改后的配置）
         if self.config_manager.save_config(config):
@@ -499,7 +508,7 @@ class SettingsDialog(QDialog):
             QMessageBox.information(
                 self,
                 "成功",
-                "配置已保存！\n\n人设切换将在下次对话时生效。"
+                "配置已保存！\n\n人设切换已立即生效。"
             )
             # 关闭对话框
             self.accept()

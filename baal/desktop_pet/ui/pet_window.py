@@ -282,6 +282,18 @@ class PetWindow(QWidget):
         self.dialogue_manager = get_dialogue_manager()
         self.dialogue_manager.trigger_dialogue.connect(self._on_proactive_dialogue)
         self.dialogue_manager.initialize_aw_client()  # 初始化AW客户端
+        
+        # 从配置中加载人设并应用到主动对话管理器
+        from ..core.persona_manager import PersonaLevel
+        from ..core.proactive_dialogue_manager import update_persona_in_dialogue_manager
+        config = self.config_manager.get_config()
+        persona_level = config.get('persona_level', PersonaLevel.STRICT_MASTER.value)
+        try:
+            update_persona_in_dialogue_manager(PersonaLevel(persona_level))
+            self.logger.info(f"Applied persona level {persona_level} to dialogue manager")
+        except Exception as e:
+            self.logger.warning(f"Failed to apply persona to dialogue manager: {e}")
+        
         self.logger.info("Proactive dialogue manager initialized")
         
         # 连接信号
@@ -1959,18 +1971,18 @@ class PetWindow(QWidget):
         if hasattr(self, 'llm_handler') and self.llm_handler:
             try:
                 self.llm_handler.add_supervision_reminder(message)
-                logger.info(f"监督提醒已加入聊天记录并安排保存: {message[:50]}...")
+                self.logger.info(f"监督提醒已加入聊天记录并安排保存: {message[:50]}...")
             except Exception as e:
-                logger.warning(f"无法将监督提醒加入聊天记录: {e}")
+                self.logger.warning(f"无法将监督提醒加入聊天记录: {e}")
         # 兼容旧的 llm_assistant 方式
         elif hasattr(self, 'llm_assistant') and self.llm_assistant:
             try:
                 from langchain_core.messages import AIMessage
                 supervision_msg = AIMessage(content=message)
                 self.llm_assistant.conversation_history.append(supervision_msg)
-                logger.info(f"监督提醒已加入聊天记录（旧方式）: {message[:50]}...")
+                self.logger.info(f"监督提醒已加入聊天记录（旧方式）: {message[:50]}...")
             except Exception as e:
-                logger.warning(f"无法将监督提醒加入聊天记录: {e}")
+                self.logger.warning(f"无法将监督提醒加入聊天记录: {e}")
     
     def showEvent(self, event):
         """显示事件"""

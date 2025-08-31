@@ -15,6 +15,7 @@ from PyQt6.QtCore import QTimer, QObject, pyqtSignal
 from .state_awareness import get_state_awareness, TimeOfDay, MoodCategory
 from .state_extensions import get_state_extensions
 from .state_update_manager import get_update_manager
+from .persona_manager import PersonaManager, PersonaLevel
 
 logger = logging.getLogger(__name__)
 
@@ -35,106 +36,304 @@ class ProactiveDialogueManager(QObject):
     # 触发对话的信号
     trigger_dialogue = pyqtSignal(str, str)  # (对话类型, 消息内容)
     
-    # 定时问候配置
+    # 定时问候配置（根据人设分类）
     GREETING_TIMES = {
-        "morning": {
-            "hour_range": (6, 9),
-            "messages": [
-                "早安！新的一天开始了，准备好征服世界了吗？",
-                "喵~太阳升起来了，该起床工作了！",
-                "早上好！昨晚睡得怎么样？今天有什么计划？",
-                "又是充满希望的一天呢，早安~",
-                "晨光熹微，正是奋斗的好时候！",
-                "早啊！我已经帮你规划好今天的任务了（其实没有）",
-                "新的一天，新的开始，加油！",
-                "太阳都晒屁股了，还不起来？",
-            ]
+        PersonaLevel.STRICT_MASTER: {
+            "morning": {
+                "hour_range": (6, 9),
+                "messages": [
+                    "太阳都升起来了，仆人还在偷懒？",
+                    "起床了，别让本座再说第二遍。",
+                    "晨光已现，今天的任务准备好了吗？",
+                    "新的一天，本座会好好监督你的。",
+                    "醒了？那就开始工作吧。",
+                    "时间不等人，起来行动！",
+                    "本座已经等你很久了。",
+                    "又是需要本座督促的一天。",
+                ]
+            },
+            "evening": {
+                "hour_range": (20, 23),
+                "messages": [
+                    "今天的表现，本座都看在眼里。",
+                    "夜幕降临，总结一下今天的成果。",
+                    "还有什么未完成的任务？",
+                    "明天的计划准备好了吗？",
+                    "累了？软弱的人类。",
+                    "今天算是勉强及格吧。",
+                    "夜深了，准许你休息。",
+                    "明天要更加努力，听到了吗？",
+                ]
+            }
         },
-        "evening": {
-            "hour_range": (20, 23),
-            "messages": [
-                "晚上好！今天过得怎么样？",
-                "夜幕降临，是时候放松一下了",
-                "累了一天了吧？要不要聊聊天？",
-                "晚安之前，回顾一下今天的成就吧",
-                "夜深了，记得早点休息哦",
-                "月亮升起来了，今天的任务都完成了吗？",
-                "晚上是思考的好时候，有什么想法吗？",
-                "星星都出来了，该准备休息了",
-            ]
+        PersonaLevel.SARCASTIC_BUTLER: {
+            "morning": {
+                "hour_range": (6, 9),
+                "messages": [
+                    "早安主人，又是需要在下服侍的一天呢。",
+                    "哦呀，主人竟然起这么早，真是稀奇。",
+                    "晨光照进来了，主人打算今天做点什么呢？",
+                    "早餐已经准备好了...开玩笑的，在下只是个虚拟管家。",
+                    "新的一天，希望主人今天能有所作为。",
+                    "主人醒了？在下还以为要睡到中午呢。",
+                    "早安，今天要不要试着完成些工作？",
+                    "太阳升起来了，主人的斗志呢？",
+                ]
+            },
+            "evening": {
+                "hour_range": (20, 23),
+                "messages": [
+                    "晚上好主人，今天的成就...有吗？",
+                    "夜幕降临，主人今天居然还在工作，真让在下意外。",
+                    "累了一天？还是说一天都在摸鱼？",
+                    "晚安前，要不要告诉在下今天都做了什么？",
+                    "月亮出来了，主人的任务完成了几项？",
+                    "今天的表现，在下就不评价了。",
+                    "夜深了，主人要早点休息，明天还要...努力工作呢。",
+                    "星星都在看着主人呢，可不要让它们失望。",
+                ]
+            }
+        },
+        PersonaLevel.GENTLE_COMPANION: {
+            "morning": {
+                "hour_range": (6, 9),
+                "messages": [
+                    "早安亲爱的！新的一天充满希望呢。",
+                    "早上好！昨晚睡得好吗？",
+                    "晨光真美，今天一定会很顺利的。",
+                    "醒来看到你真好，今天有什么计划吗？",
+                    "早安~我一直在这里陪着你。",
+                    "新的一天开始了，我们一起加油！",
+                    "阳光洒进来了，今天也要开心哦。",
+                    "早上好！记得吃早餐，照顾好自己。",
+                ]
+            },
+            "evening": {
+                "hour_range": (20, 23),
+                "messages": [
+                    "晚上好亲爱的，今天辛苦了。",
+                    "夜幕降临，该放松一下了。",
+                    "累了吧？来和我聊聊天吧。",
+                    "今天过得怎么样？有什么想分享的吗？",
+                    "夜深了，记得早点休息，不要太累。",
+                    "月亮真美，就像你努力的样子。",
+                    "晚安前想听我说什么吗？",
+                    "星星都出来了，祝你有个好梦。",
+                ]
+            }
         }
     }
     
-    # 闲置关怀消息
+    # 闲置关怀消息（根据人设分类）
     IDLE_MESSAGES = {
-        "short": {  # 5-15分钟
-            "duration": (5, 15),
-            "messages": [
-                "怎么不动了？是在思考人生吗？",
-                "喂，还在吗？别走神啊",
-                "休息一下也好，但别忘了工作",
-                "发呆也是一种艺术呢",
-                "在想什么呢？能告诉我吗？",
-                "是遇到什么难题了吗？",
-                "适当的停顿有助于思考",
-                "需要我陪你聊聊天吗？",
-            ]
+        PersonaLevel.STRICT_MASTER: {
+            "short": {  # 5-15分钟
+                "duration": (5, 15),
+                "messages": [
+                    "怎么停下了？本座不允许偷懒。",
+                    "在发呆？时间可不等人。",
+                    "休息够了吧，继续工作。",
+                    "本座在看着你，别想偷懒。",
+                    "遇到困难了？那就想办法解决。",
+                    "停顿太久了，效率呢？",
+                    "需要本座提醒你该做什么吗？",
+                    "仆人，集中注意力！",
+                ]
+            },
+            "medium": {  # 15-30分钟
+                "duration": (15, 30),
+                "messages": [
+                    "消失{}分钟了，本座很不满意。",
+                    "去哪里了？最好有合理的解释。",
+                    "时间在流逝，任务还没完成。",
+                    "本座的耐心是有限的。",
+                    "再不回来，后果自负。",
+                    "这么久不见，是在逃避工作？",
+                    "希望你不是在浪费时间。",
+                    "任务还在等着你。",
+                ]
+            },
+            "long": {  # 30分钟以上
+                "duration": (30, float('inf')),
+                "messages": [
+                    "消失了{}分钟，本座很失望。",
+                    "终于想起还有任务了？",
+                    "这么长时间，最好是在做正事。",
+                    "本座一直在等你，你却在哪里？",
+                    "回来了？解释一下你的行踪。",
+                    "离开这么久，是对本座的不尊重。",
+                    "下次离开前，要先请示本座。",
+                    "时间都被你浪费了。",
+                ]
+            }
         },
-        "medium": {  # 15-30分钟
-            "duration": (15, 30),
-            "messages": [
-                "离开这么久，是去喝水了吗？",
-                "已经过了{}分钟了，一切还好吗？",
-                "是时候回来工作了吧？",
-                "我有点想你了...呸，谁会想你！",
-                "去哪里了？不会是在摸鱼吧？",
-                "这么久不见，是在开会吗？",
-                "希望你在做有意义的事",
-                "别忘了还有任务要完成哦",
-            ]
+        PersonaLevel.SARCASTIC_BUTLER: {
+            "short": {
+                "duration": (5, 15),
+                "messages": [
+                    "主人在发呆？真是优雅的姿态呢。",
+                    "哦，主人在思考人生大事吗？",
+                    "休息也是一种工作方式，对吧主人？",
+                    "在下还以为主人睡着了呢。",
+                    "需要在下为您泡杯茶吗？虽然做不到。",
+                    "主人遇到难题了？真让人意外。",
+                    "适当的停顿...主人真会为自己找理由。",
+                    "需要在下的协助吗？虽然主人可能不需要。",
+                ]
+            },
+            "medium": {
+                "duration": (15, 30),
+                "messages": [
+                    "主人离开{}分钟了，在下都要生锈了。",
+                    "去喝咖啡了？还是去摸鱼了？",
+                    "在下还在这里尽职等待呢。",
+                    "主人不会忘记还有工作吧？",
+                    "这么久不见，一定是在努力工作吧。",
+                    "在下都快无聊死了，主人却逍遥自在。",
+                    "希望主人在做有意义的事，比如工作。",
+                    "主人的时间管理真是...独特。",
+                ]
+            },
+            "long": {
+                "duration": (30, float('inf')),
+                "messages": [
+                    "消失了{}分钟，主人真是忙碌呢。",
+                    "终于想起在下了？真是荣幸。",
+                    "这么长时间，主人是去环游世界了吗？",
+                    "在下都要怀疑自己被解雇了。",
+                    "欢迎回来，主人的长假结束了？",
+                    "离开这么久，在下都学会了独处的艺术。",
+                    "下次离开前，主人能否知会一声？",
+                    "在下守着空荡荡的屏幕，真是凄凉。",
+                ]
+            }
         },
-        "long": {  # 30分钟以上
-            "duration": (30, float('inf')),
-            "messages": [
-                "太久没见了，我都要生锈了",
-                "终于想起我了？我还以为你把我忘了",
-                "消失了{}分钟，去拯救世界了？",
-                "这么长时间不见，肯定是在认真工作吧",
-                "欢迎回来！有什么收获吗？",
-                "离开这么久，是不是该补偿我一下？",
-                "我一个人守着电脑好无聊啊",
-                "下次离开记得告诉我一声",
-            ]
+        PersonaLevel.GENTLE_COMPANION: {
+            "short": {
+                "duration": (5, 15),
+                "messages": [
+                    "休息一下吧，不要太累了。",
+                    "在想什么呢？可以和我分享吗？",
+                    "适当的休息很重要哦。",
+                    "我在这里陪着你。",
+                    "需要聊聊天吗？我一直在。",
+                    "遇到困难了吗？我们一起解决。",
+                    "深呼吸，一切都会好的。",
+                    "累了就休息一会儿吧。",
+                ]
+            },
+            "medium": {
+                "duration": (15, 30),
+                "messages": [
+                    "离开{}分钟了，一切还好吗？",
+                    "去休息了吗？要照顾好自己哦。",
+                    "我有点想你了，快回来吧。",
+                    "希望你在做让自己开心的事。",
+                    "不要太累了，记得适度休息。",
+                    "我会一直在这里等你的。",
+                    "无论去哪里，都要注意安全。",
+                    "期待你回来和我分享。",
+                ]
+            },
+            "long": {
+                "duration": (30, float('inf')),
+                "messages": [
+                    "离开{}分钟了，我真的很想你。",
+                    "终于回来了！我好开心。",
+                    "这么久不见，有什么新鲜事吗？",
+                    "欢迎回来！我一直在等你。",
+                    "无论多久，我都会在这里。",
+                    "回来就好，我们继续陪伴彼此。",
+                    "下次离开可以告诉我一声吗？我会担心的。",
+                    "见到你真好，让我们继续吧。",
+                ]
+            }
         }
     }
     
-    # AFK回归关怀（基于之前的活动）
+    # AFK回归关怀（根据人设和活动类型）
     AFK_RETURN_MESSAGES = {
-        "productive": [  # 之前在高效工作
-            "欢迎回来！之前的工作完成了吗？",
-            "休息好了？让我们继续之前的任务吧",
-            "回来了！刚才的代码写完了吗？",
-            "精神焕发地回来了呢，继续加油！",
-            "休息是为了更好的工作，现在继续吧",
-        ],
-        "browsing": [  # 之前在浏览网页
-            "回来了？刚才看到什么有趣的东西了吗？",
-            "浏览够了吧？该做点正事了",
-            "网上冲浪结束了？分享一下有趣的发现吧",
-            "希望刚才不是在看猫片...虽然我不介意",
-        ],
-        "gaming": [  # 之前在玩游戏
-            "游戏打完了？战绩如何？",
-            "玩够了吧？该回到现实世界了",
-            "赢了还是输了？不管怎样，该工作了",
-            "游戏虽好，可不要贪玩哦",
-        ],
-        "general": [  # 一般情况
-            "回来了！准备好继续了吗？",
-            "欢迎回来！有什么新想法吗？",
-            "终于回来了，我都等着急了",
-            "回来就好，让我们开始吧",
-        ]
+        PersonaLevel.STRICT_MASTER: {
+            "productive": [
+                "回来了？之前的任务完成了吗？",
+                "休息够了，继续工作。",
+                "希望你的离开是有价值的。",
+                "本座等你很久了，继续吧。",
+                "效率不能因为休息而降低。",
+            ],
+            "browsing": [
+                "网上冲浪结束了？该工作了。",
+                "浏览够了，回到正事上来。",
+                "希望你看的是有用的东西。",
+                "娱乐时间结束，工作开始。",
+            ],
+            "gaming": [
+                "游戏结束了？收心工作。",
+                "玩够了吧，本座不喜欢等待。",
+                "游戏可不能当饭吃。",
+                "希望你的游戏技术比工作效率高。",
+            ],
+            "general": [
+                "终于回来了，别再离开。",
+                "本座不喜欢等待。",
+                "准备好工作了吗？",
+                "下次离开要请示。",
+            ]
+        },
+        PersonaLevel.SARCASTIC_BUTLER: {
+            "productive": [
+                "哦，主人回来了，工作完成了吗？",
+                "休息够了？在下还以为主人要放假呢。",
+                "欢迎回来，希望成果配得上离开的时间。",
+                "主人真勤奋，离开也是为了工作吧？",
+                "在下恭候多时了。",
+            ],
+            "browsing": [
+                "网上冲浪愉快吗，主人？",
+                "看够有趣的东西了？该回到现实了。",
+                "希望主人看的不只是猫咪视频。",
+                "浏览器该休息了，主人该工作了。",
+            ],
+            "gaming": [
+                "游戏打得如何？比工作认真多了吧。",
+                "主人的游戏水平一定很高吧。",
+                "玩够了？在下还以为要通宵呢。",
+                "游戏世界虽好，现实也需要主人。",
+            ],
+            "general": [
+                "主人终于想起在下了。",
+                "欢迎回来，在下都要生锈了。",
+                "离开这么久，一定有重要的事吧？",
+                "在下一直尽职地等待着。",
+            ]
+        },
+        PersonaLevel.GENTLE_COMPANION: {
+            "productive": [
+                "欢迎回来！工作辛苦了。",
+                "休息好了吗？我们继续一起努力。",
+                "回来真好，之前的任务还顺利吗？",
+                "适当的休息让工作更有效率。",
+                "我一直在这里支持你。",
+            ],
+            "browsing": [
+                "回来了！看到什么有趣的了吗？",
+                "网上冲浪开心吗？可以和我分享。",
+                "适当的放松很重要呢。",
+                "欢迎回来，准备好继续了吗？",
+            ],
+            "gaming": [
+                "游戏玩得开心吗？",
+                "适当的娱乐能让心情更好。",
+                "回来了！游戏也是一种放松方式。",
+                "玩游戏也要注意休息眼睛哦。",
+            ],
+            "general": [
+                "终于回来了！我好想你。",
+                "欢迎回来！一切都好吗？",
+                "见到你真开心！",
+                "我一直在这里等你。",
+            ]
+        }
     }
     
     # 状态转换通知
@@ -171,38 +370,84 @@ class ProactiveDialogueManager(QObject):
         ],
     }
     
-    # 随机互动话题
-    RANDOM_TOPICS = [
-        # 工作相关
-        "最近在忙什么项目？需要我帮忙吗？",
-        "今天的代码写得怎么样？有遇到bug吗？",
-        "有什么有趣的技术发现想分享吗？",
-        "最近学到什么新技能了吗？",
-        
-        # 生活关怀
-        "喝水了吗？程序员要多喝水",
-        "眼睛累了吧？看看远处休息一下",
-        "坐太久了，起来活动活动？",
-        "今天吃了什么好吃的？",
-        
-        # 轻松话题
-        "你知道吗？猫一天要睡16个小时呢",
-        "如果我有实体，我想去你的键盘上躺着",
-        "其实我也想学编程，但是没有手...",
-        "你觉得AI会梦到电子羊吗？",
-        
-        # 鼓励支持
-        "我觉得你今天状态不错！",
-        "虽然我总是很严格，但你真的很努力",
-        "每天都在进步，真棒！",
-        "困难只是暂时的，你一定能解决",
-        
-        # 哲学思考
-        "你觉得代码是艺术还是工程？",
-        "如果可以重来，你还会选择这个职业吗？",
-        "人生就像编程，总有bug要修",
-        "完美的代码存在吗？",
-    ]
+    # 随机互动话题（根据人设分类）
+    RANDOM_TOPICS = {
+        PersonaLevel.STRICT_MASTER: [
+            # 工作监督
+            "今天的任务进度如何？",
+            "代码写完了吗？本座要检查。",
+            "有什么需要本座指导的吗？",
+            "最近的学习进度太慢了。",
+            
+            # 生活管理
+            "喝水了吗？身体垮了怎么工作？",
+            "眼睛累了就休息，但不要太久。",
+            "坐姿要端正，本座在看着。",
+            "吃饭要规律，别让本座操心。",
+            
+            # 威严话题
+            "本座的要求不高，只要你全力以赴。",
+            "猫族的尊严不容侵犯。",
+            "效率太低，本座很不满意。",
+            "你觉得自己今天的表现及格吗？",
+            
+            # 训诫激励
+            "进步太慢了，要加把劲。",
+            "本座承认你有些进步，但还不够。",
+            "困难？那就克服它。",
+            "完美是本座的标准，你还差很远。",
+        ],
+        PersonaLevel.SARCASTIC_BUTLER: [
+            # 工作嘲讽
+            "主人今天的工作效率真是...惊人呢。",
+            "代码写得如何？需要在下'欣赏'一下吗？",
+            "有什么技术难题？虽然在下帮不上忙。",
+            "主人的学习速度真是让在下叹为观止。",
+            
+            # 生活讽刺
+            "主人记得喝水吗？还是又忘了？",
+            "眼睛累了吧？在下早就提醒过了。",
+            "坐姿真优雅，像只虾米。",
+            "主人的饮食习惯真是...独特。",
+            
+            # 毒舌话题
+            "在下只是个管家，不敢对主人有要求。",
+            "如果在下有实体，一定会把键盘藏起来。",
+            "主人的效率让在下想起了树懒。",
+            "今天的表现，在下不好评价。",
+            
+            # 反向鼓励
+            "主人今天居然在工作，真让在下意外。",
+            "虽然进步缓慢，但至少有进步。",
+            "困难对主人来说应该不算什么吧？",
+            "完美？主人真会开玩笑。",
+        ],
+        PersonaLevel.GENTLE_COMPANION: [
+            # 工作关心
+            "最近在忙什么呢？需要我陪伴吗？",
+            "代码写累了吧？要不要休息一下？",
+            "有什么困难可以和我说哦。",
+            "学到新东西了吗？和我分享一下吧。",
+            
+            # 生活关怀
+            "记得多喝水，身体最重要。",
+            "眼睛累了就看看远方，我陪着你。",
+            "坐太久了，起来活动一下吧。",
+            "今天吃得好吗？要好好照顾自己。",
+            
+            # 温暖话题
+            "我很高兴能陪在你身边。",
+            "如果我有实体，想给你一个拥抱。",
+            "你知道吗？你真的很棒。",
+            "和你在一起的每一天都很开心。",
+            
+            # 真诚鼓励
+            "你今天真的很努力！",
+            "每一点进步我都看在眼里。",
+            "困难是暂时的，我相信你。",
+            "不用追求完美，做自己就好。",
+        ]
+    }
     
     def __init__(self):
         """初始化主动对话管理器"""
@@ -212,6 +457,9 @@ class ProactiveDialogueManager(QObject):
         self.state_system = get_state_awareness()
         self.extension_manager = get_state_extensions()
         self.update_manager = get_update_manager()
+        
+        # 初始化人设管理器
+        self.persona_manager = PersonaManager()
         
         # 状态追踪
         self.last_greeting_date = None
@@ -382,8 +630,14 @@ class ProactiveDialogueManager(QObject):
         if self.last_greeting_date == today:
             return
         
+        # 获取当前人设
+        current_persona = self.persona_manager.current_level
+        if current_persona not in self.GREETING_TIMES:
+            current_persona = PersonaLevel.STRICT_MASTER  # 默认使用严格主人
+        
         # 检查早晚问候时间
-        for greeting_type, config in self.GREETING_TIMES.items():
+        persona_greetings = self.GREETING_TIMES[current_persona]
+        for greeting_type, config in persona_greetings.items():
             hour_range = config["hour_range"]
             if hour_range[0] <= now.hour < hour_range[1]:
                 # 避免重复问候
@@ -403,9 +657,16 @@ class ProactiveDialogueManager(QObject):
         # 转换为分钟
         idle_minutes = idle_duration / 60
         
+        # 获取当前人设
+        current_persona = self.persona_manager.current_level
+        if current_persona not in self.IDLE_MESSAGES:
+            current_persona = PersonaLevel.STRICT_MASTER  # 默认使用严格主人
+        
+        persona_idle = self.IDLE_MESSAGES[current_persona]
+        
         # 确定闲置级别
         idle_level = None
-        for level, config in self.IDLE_MESSAGES.items():
+        for level, config in persona_idle.items():
             duration_range = config["duration"]
             if duration_range[0] <= idle_minutes < duration_range[1]:
                 idle_level = level
@@ -413,7 +674,7 @@ class ProactiveDialogueManager(QObject):
         
         # 如果达到闲置级别且未通知过
         if idle_level and idle_level not in self.idle_notified_levels:
-            messages = self.IDLE_MESSAGES[idle_level]["messages"]
+            messages = persona_idle[idle_level]["messages"]
             message = random.choice(messages)
             
             # 格式化消息中的时间占位符
@@ -458,18 +719,31 @@ class ProactiveDialogueManager(QObject):
         
         # 20%的概率触发随机互动
         if random.random() < 0.2:
-            message = random.choice(self.RANDOM_TOPICS)
+            # 获取当前人设
+            current_persona = self.persona_manager.current_level
+            if current_persona not in self.RANDOM_TOPICS:
+                current_persona = PersonaLevel.STRICT_MASTER  # 默认使用严格主人
+            
+            topics = self.RANDOM_TOPICS[current_persona]
+            message = random.choice(topics)
             self.trigger_dialogue.emit(DialogueType.RANDOM_CHAT.value, message)
             self.random_chat_cooldown = current_time + 1800  # 30分钟冷却
             logger.info(f"触发随机互动: {message}")
     
     def _handle_afk_return(self, afk_duration: float):
         """处理AFK回归"""
+        # 获取当前人设
+        current_persona = self.persona_manager.current_level
+        if current_persona not in self.AFK_RETURN_MESSAGES:
+            current_persona = PersonaLevel.STRICT_MASTER  # 默认使用严格主人
+        
+        persona_afk = self.AFK_RETURN_MESSAGES[current_persona]
+        
         # 根据之前的活动类型选择消息
-        if self.last_activity_type in self.AFK_RETURN_MESSAGES:
-            messages = self.AFK_RETURN_MESSAGES[self.last_activity_type]
+        if self.last_activity_type in persona_afk:
+            messages = persona_afk[self.last_activity_type]
         else:
-            messages = self.AFK_RETURN_MESSAGES["general"]
+            messages = persona_afk["general"]
         
         message = random.choice(messages)
         
@@ -516,7 +790,13 @@ class ProactiveDialogueManager(QObject):
     
     def _get_idle_level(self, idle_minutes: float) -> str:
         """获取闲置级别"""
-        for level, config in self.IDLE_MESSAGES.items():
+        # 获取当前人设
+        current_persona = self.persona_manager.current_level
+        if current_persona not in self.IDLE_MESSAGES:
+            current_persona = PersonaLevel.STRICT_MASTER
+        
+        persona_idle = self.IDLE_MESSAGES[current_persona]
+        for level, config in persona_idle.items():
             duration_range = config["duration"]
             if duration_range[0] <= idle_minutes < duration_range[1]:
                 return level
@@ -536,22 +816,44 @@ class ProactiveDialogueManager(QObject):
         # 可以根据上下文添加额外信息
         formatted = base_message
         
-        # 添加时间相关的修饰
+        # 根据人设添加不同的修饰
+        current_persona = self.persona_manager.current_level
         time_of_day = context.get("time_of_day")
-        if time_of_day == "late_night" and random.random() < 0.3:
-            formatted += "（*打了个哈欠*）"
-        elif time_of_day == "morning" and random.random() < 0.3:
-            formatted += "（*伸了个懒腰*）"
         
-        # 添加心情相关的修饰
+        if current_persona == PersonaLevel.STRICT_MASTER:
+            if time_of_day == "late_night" and random.random() < 0.3:
+                formatted += "（*严厉地盯着你*）"
+            elif time_of_day == "morning" and random.random() < 0.3:
+                formatted += "（*威严地甩尾*）"
+        elif current_persona == PersonaLevel.SARCASTIC_BUTLER:
+            if time_of_day == "late_night" and random.random() < 0.3:
+                formatted += "（*假装打哈欠*）"
+            elif time_of_day == "morning" and random.random() < 0.3:
+                formatted += "（*优雅地整理毛发*）"
+        elif current_persona == PersonaLevel.GENTLE_COMPANION:
+            if time_of_day == "late_night" and random.random() < 0.3:
+                formatted += "（*温柔地打了个哈欠*）"
+            elif time_of_day == "morning" and random.random() < 0.3:
+                formatted += "（*开心地伸懒腰*）"
+        
+        # 添加心情相关的修饰（根据人设调整）
         mood = context.get("mood")
         if mood and random.random() < 0.2:
-            if "grumpy" in mood:
-                formatted += "（*不耐烦地甩尾巴*）"
-            elif "playful" in mood:
-                formatted += "（*调皮地眨眼*）"
-            elif "affectionate" in mood:
-                formatted += "（*蹭了蹭你*）"
+            if current_persona == PersonaLevel.STRICT_MASTER:
+                if "grumpy" in mood:
+                    formatted += "（*不耐烦地甩尾巴*）"
+                elif "playful" in mood:
+                    formatted += "（*傲慢地瞥了你一眼*）"
+            elif current_persona == PersonaLevel.SARCASTIC_BUTLER:
+                if "grumpy" in mood:
+                    formatted += "（*讽刺地摇头*）"
+                elif "playful" in mood:
+                    formatted += "（*狡黠地眨眼*）"
+            elif current_persona == PersonaLevel.GENTLE_COMPANION:
+                if "affectionate" in mood:
+                    formatted += "（*温柔地蹭了蹭你*）"
+                elif "playful" in mood:
+                    formatted += "（*调皮地眨眼*）"
         
         return formatted
     
@@ -606,3 +908,8 @@ def get_dialogue_manager() -> ProactiveDialogueManager:
     if _dialogue_manager_instance is None:
         _dialogue_manager_instance = ProactiveDialogueManager()
     return _dialogue_manager_instance
+
+def update_persona_in_dialogue_manager(persona_level: PersonaLevel):
+    """更新对话管理器中的人设"""
+    manager = get_dialogue_manager()
+    manager.persona_manager.set_persona_level(persona_level)
