@@ -41,6 +41,15 @@ class SupervisionMode(QObject):
         self.config_manager = ConfigManager()
         self.persona_manager = persona_manager  # 保存人设管理器引用
         
+        # 初始化工作软件管理器
+        try:
+            from .core.category_manager import CategoryManager
+            self.category_manager = CategoryManager()
+            logger.info(f"工作软件管理器已初始化，加载了 {len(self.category_manager.get_work_apps())} 个工作软件")
+        except Exception as e:
+            logger.warning(f"无法初始化工作软件管理器: {e}")
+            self.category_manager = None
+        
         # 初始化LLM助手（需要配置）
         self.llm_assistant = None
         self._init_llm_assistant()
@@ -528,6 +537,31 @@ class SupervisionMode(QObject):
             time_of_day = datetime.now().hour
             time_period = "深夜" if time_of_day < 6 else "早晨" if time_of_day < 12 else "下午" if time_of_day < 18 else "晚上"
             
+            # 获取生产力数据用于更精准的评估
+            productivity_data = stats.get('productivity_analysis', {})
+            productive_percentage = productivity_data.get('productive_percentage', 0)
+            category_data = stats.get('category_stats', {})
+            
+            # 提取当前使用的工作软件列表（重要：用于判断是否在工作）
+            work_apps_in_use = []
+            if hasattr(self, 'category_manager') and self.category_manager:
+                work_apps_list = self.category_manager.get_work_apps()
+                # 从5分钟数据中提取正在使用的工作软件
+                if stats_5m and work_apps_list:
+                    for work_app in work_apps_list:
+                        if work_app.lower() in stats_5m.lower():
+                            work_apps_in_use.append(work_app)
+            
+            # 【关键优化】：如果检测到工作软件或生产力高，直接返回不提醒
+            if work_apps_in_use or productive_percentage > 50:
+                logger.info(f"用户正在使用工作软件 {work_apps_in_use} 或生产力较高 {productive_percentage:.1f}%，不需要提醒")
+                return {
+                    'should_remind': False,
+                    'deviation_level': '无',
+                    'reminder_message': '',
+                    'analysis': f'用户正在使用工作软件或保持较高生产力（{productive_percentage:.1f}%），无需打扰'
+                }
+            
             # 随机选择一种对话风格
             dialog_styles = [
                 "直接对话",  # 直接和用户说话
@@ -600,11 +634,33 @@ class SupervisionMode(QObject):
     }}
 }}
 
-判断标准：
-- 当前专注且目标相关→不提醒
-- 短期明显偏离→提醒
-- 仅历史偏离但改善中→鼓励
-- 避免5分钟内重复提醒
+【极其重要的判断标准】：
+1. **工作软件优先原则**：如果用户正在使用任何已配置的工作软件（{', '.join(work_apps_in_use) if work_apps_in_use else '检测到工作软件'}），则**绝对不应该提醒或批评**，应该鼓励或保持安静
+2. **目标匹配原则**：
+   - 短期目标只需执行其中**任何一个**即可，不要求同时执行所有
+   - 例如：短期目标是["写代码", "看文档", "学习"]，用户只要在做其中任一件事就不应该被批评
+   - 长期目标相关的活动也应该被认可
+3. **生产力百分比原则**：如果生产性活动占比超过50%，不应该批评
+4. **避免错误批评**：
+   - 如果用户在使用VSCode、PyCharm、飞书、钉钉等工作软件，**必须判定为不需要提醒**
+   - 如果5分钟数据显示主要是工作相关应用，**必须判定为不需要提醒**
+   - 宁可不提醒，也不要错误批评正在工作的用户
+5. **改善趋势原则**：如果用户从非生产性活动转向生产性活动，应该鼓励而不是批评
+6. **避免频繁打扰**：避免5分钟内重复提醒
+
+【判断流程】：
+1. 首先检查是否在使用工作软件 → 是 → 不提醒（可以鼓励）
+2. 其次检查是否在执行任一短期目标 → 是 → 不提醒
+3. 再检查生产力百分比 → >50% → 不提醒
+4. 最后才考虑是否需要提醒
+
+当前检测到的工作软件使用：{work_apps_in_use if work_apps_in_use else '未检测到明确的工作软件'}
+生产力百分比：{productive_percentage:.1f}%
+
+【重要提醒】：
+- 如果不确定用户是否在工作，选择不提醒
+- 如果用户可能在工作但使用了非典型工具，选择不提醒
+- 保护用户的专注状态比监督更重要
 """
             
             # 发送评估请求

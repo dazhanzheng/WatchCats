@@ -838,11 +838,52 @@ class PetWindow(QWidget):
             # 双击左键直接唤出聊天窗口
             self.logger.info("Double click event - showing chat bubble")
             
-            # 显示随机的双击招呼语
-            greeting = PresetResponseManager.get_response(
-                self.persona_manager.current_level,
-                "double_click_greeting"
-            )
+            # 使用状态感知系统
+            from ..core.state_awareness import get_state_awareness
+            from ..core.state_update_manager import get_update_manager
+            state_system = get_state_awareness()
+            update_manager = get_update_manager()
+            
+            # 获取互动状态
+            interaction_state = state_system.get_interaction_state()
+            
+            # 触发互动事件
+            update_manager.trigger_event("intense_interaction")
+            
+            # 根据时间选择合适的招呼语
+            from datetime import datetime
+            hour = datetime.now().hour
+            
+            # 映射互动状态到招呼语类型
+            greeting_map = {
+                "first_meet": "welcome",
+                "long_time_no_see": "long_time_no_see",
+                "frequent_interaction": "frequent_interaction",
+                "regular_interaction": "double_click_greeting"
+            }
+            
+            # 优先使用时间相关的招呼语
+            if 5 <= hour < 9:
+                greeting_type = "morning_greeting"
+            elif 22 <= hour < 24 or 0 <= hour < 2:
+                greeting_type = "late_night_care"
+            else:
+                # 使用互动状态对应的招呼语
+                greeting_type = greeting_map.get(interaction_state, "double_click_greeting")
+            
+            # 尝试获取对应类型的招呼语，如果没有则使用默认
+            try:
+                greeting = PresetResponseManager.get_response(
+                    self.persona_manager.current_level,
+                    greeting_type
+                )
+            except:
+                # 如果特定类型不存在，使用默认招呼语
+                greeting = PresetResponseManager.get_response(
+                    self.persona_manager.current_level,
+                    "double_click_greeting"
+                )
+            
             if greeting.startswith("<#"):
                 self._update_emotion(greeting[:4])
                 greeting = greeting[4:].strip()
@@ -856,7 +897,7 @@ class PetWindow(QWidget):
             
             self.chat_bubble.show_message(greeting)
             self.chat_bubble.input_field.setFocus()
-            self.logger.info("Chat bubble shown with greeting")
+            self.logger.info(f"Chat bubble shown with {greeting_type}")
     
     @log_ui_event("show_chat_bubble")
     def _show_chat_bubble(self, toggle=False):
@@ -1612,6 +1653,10 @@ class PetWindow(QWidget):
         if self.supervision_mode.is_active:
             # 停止监督
             self.supervision_mode.stop_supervision()
+            
+            # 触发监督模式切换事件
+            from ..core.state_update_manager import get_update_manager
+            get_update_manager().trigger_event("supervision_toggle")
             response = PresetResponseManager.get_response(
                 self.persona_manager.current_level,
                 "supervision_stop"
@@ -1645,6 +1690,10 @@ class PetWindow(QWidget):
         self._pending_supervision_goal = long_term_goal
         self._pending_supervision_tasks = short_term_goals
         self._pending_work_apps = work_apps or []
+        
+        # 触发监督模式切换事件
+        from ..core.state_update_manager import get_update_manager
+        get_update_manager().trigger_event("supervision_toggle")
         
         # 保存工作软件列表
         if work_apps:
