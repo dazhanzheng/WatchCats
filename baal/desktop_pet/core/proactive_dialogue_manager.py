@@ -495,7 +495,7 @@ class ProactiveDialogueManager(QObject):
             "type": dialogue_type.value,
             "timestamp": datetime.now().isoformat(),
             "time_of_day": self.state_system.get_time_of_day().value,
-            "mood": self.state_system.get_random_mood(),
+            "mood": "normal",  # 默认心情，StateAwarenessSystem暂时没有get_random_mood方法
         }
         
         # 添加类型特定的上下文

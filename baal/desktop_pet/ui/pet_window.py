@@ -1812,6 +1812,13 @@ class PetWindow(QWidget):
                 self._start_bubble_auto_hide_timer(10000)  # 再等待10秒
                 return
             
+            # 检查是否正在查看历史记录
+            if hasattr(self.chat_bubble, 'show_history') and self.chat_bubble.show_history:
+                # 用户正在查看历史记录，延长计时器
+                self._start_bubble_auto_hide_timer(30000)  # 再等待30秒
+                self.logger.debug("用户正在查看历史记录，延迟自动隐藏")
+                return
+            
             self.chat_bubble.hide()
             self.logger.info("气泡已自动隐藏（用户无交互）")
     
@@ -1863,7 +1870,7 @@ class PetWindow(QWidget):
                 self._switch_emotion(random.choice(emotions))
             
             # 调整位置
-            self._adjust_bubble_position()
+            self.chat_bubble.set_position_relative_to(self, use_offset=True)
             
             # 设置自动隐藏（主动对话30秒后自动隐藏）
             self.bubble_auto_hide_timer.stop()

@@ -508,6 +508,8 @@ class ChatBubble(QWidget):
                 self.setFixedSize(self.current_width, 300)
                 # 显示历史时启用滚动条
                 self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+                # 发出用户交互信号，重置自动隐藏计时器
+                self.user_interaction.emit()
         else:
             # 向下滚动 - 隐藏历史
             if self.show_history:
@@ -517,10 +519,14 @@ class ChatBubble(QWidget):
                 self.setFixedSize(self.current_width, self.current_height)
                 # 隐藏历史时禁用滚动条
                 self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+                # 发出用户交互信号，重置自动隐藏计时器
+                self.user_interaction.emit()
         
         # 传递事件给滚动区域（只在显示历史时）
         if self.show_history:
             self.scroll_area.wheelEvent(event)
+            # 滚动历史记录也算用户交互
+            self.user_interaction.emit()
     
     def mousePressEvent(self, event):
         """处理鼠标点击事件"""
@@ -607,11 +613,9 @@ class ChatBubble(QWidget):
         """
         self.logger.info(f"Setting proactive message: {message[:50]}...")
         
-        # 添加到对话历史
-        self.conversation_history.append(("baal", message))
-        
-        # 显示消息
-        self.show_message(message, msg_type="baal")
+        # 直接使用show_message，它会自动添加到历史
+        # 但不加 "Baal: " 前缀，因为show_message会自动处理
+        self.show_message(f"Baal: {message}", msg_type="baal")
         
         # 启用输入框（允许用户回复）
         self.input_text.setEnabled(True)
