@@ -483,6 +483,22 @@ class StateAwarenessSystem:
         
         return random.choices(moods, weights=probabilities)[0]
     
+    def get_random_mood(self) -> str:
+        """获取随机心情（80%基于时间，20%纯随机）
+        
+        Returns:
+            心情字符串，如 "energetic", "playful" 等
+        """
+        # 20%概率返回纯随机心情
+        if random.random() < 0.2:
+            # 纯随机选择任意心情
+            random_mood = random.choice(list(MoodCategory))
+            return random_mood.value
+        
+        # 80%概率返回基于时间的心情
+        time_based_mood = self.get_mood_by_time()
+        return time_based_mood.value
+    
     def get_interaction_state(self) -> str:
         """获取互动状态"""
         now = datetime.now()
