@@ -953,4 +953,74 @@ class LLMHandler:
     
     def has_conversation_history(self) -> bool:
         """检查是否有对话历史"""
-        return hasattr(self, 'has_history') and self.has_history 
+        return hasattr(self, 'has_history') and self.has_history
+    
+    def generate_dynamic_response(self, context: str, mood: int = 5, parameters: Dict[str, Any] = None) -> str:
+        """动态生成响应消息
+        
+        Args:
+            context: 上下文场景（如 "memory_cleared", "supervision_stopped" 等）
+            mood: 心情表情 (1-7)
+            parameters: 额外参数字典
+            
+        Returns:
+            str: 生成的响应消息，带表情标记
+        """
+        try:
+            # 根据人设和上下文生成提示词
+            persona_level = self.persona_manager.current_level
+            persona_traits = self.persona_manager.get_traits()
+            
+            # 构建场景描述
+            context_descriptions = {
+                "memory_cleared": "用户刚刚清除了对话记忆，需要给出确认反馈",
+                "memory_clear_failed": "清除对话记忆失败了，需要给出错误提示",
+                "no_memory_to_clear": "用户想清除记忆但没有历史记录需要清除",
+                "supervision_stopped": "监督模式已关闭，需要给出确认",
+                "supervision_started": "监督模式已启动，需要给出确认",
+                "goals_updated": "监督目标已更新，需要给出确认",
+                "api_required_for_supervision": "监督模式需要API密钥才能工作",
+                "api_config_error": "API配置有误，无法正常工作",
+                "supervision_cancelled": "用户取消了监督模式设置"
+            }
+            
+            scenario = context_descriptions.get(context, f"场景：{context}")
+            
+            # 构建动态生成的系统提示词
+            dynamic_prompt = f"""你是{persona_traits['name']}，一个{persona_traits['description']}。
+你的性格特点：{', '.join(persona_traits['characteristics'])}
+你的语言风格：{persona_traits['language_style']}
+
+当前场景：{scenario}
+当前心情值：{mood}（1=开心，2=微笑，3=正常，4=困惑，5=平静，6=生气，7=愤怒）
+
+请根据你的人设和当前心情，生成一个简短的反应。
+要求：
+1. 必须符合你的人设特点和语言风格
+2. 长度控制在20字以内
+3. 必须在开头加上表情标记 <#{mood}>
+4. 不要重复场景描述，直接给出反应
+
+生成的格式：<#{mood}>你的反应文本"""
+
+            # 如果有额外参数，添加到提示词中
+            if parameters:
+                param_str = '\n'.join([f"{k}: {v}" for k, v in parameters.items()])
+                dynamic_prompt += f"\n\n额外信息：\n{param_str}"
+            
+            # 使用对话模型生成响应
+            llm = self._create_llm(streaming=False, temperature=0.8, use_chat_model=True)
+            response = llm.invoke([SystemMessage(content=dynamic_prompt)])
+            
+            # 确保响应包含表情标记
+            result = response.content.strip()
+            if not result.startswith(f"<#{mood}>"):
+                result = f"<#{mood}>{result}"
+            
+            self.logger.debug(f"Generated dynamic response for {context}: {result}")
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"Failed to generate dynamic response: {e}", exc_info=True)
+            # 返回预设的后备响应
+            return PresetDialogues.get_dialogue(persona_level, "default", "default") 

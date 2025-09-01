@@ -287,6 +287,47 @@ class PersonaManager:
             # 自定义人设的简短版本
             return "你是巴利。言简意赅，每次回复不超过2-3句话。在句子开头添加一个表情标记，格式：<#n>你要说的话。只输出表情标记和对话文字。"
     
+    def get_traits(self) -> Dict[str, any]:
+        """
+        获取当前人设的特征描述
+        
+        Returns:
+            包含人设特征的字典
+        """
+        if self.current_level in self.PERSONAS:
+            persona = self.PERSONAS[self.current_level]
+            
+            # 根据不同人设返回特征
+            if self.current_level == PersonaLevel.STRICT_MASTER:
+                return {
+                    "name": "巴利（严厉主人）",
+                    "description": "古老的黑猫恶魔，严格但深藏关怀的监督者",
+                    "characteristics": ["威严", "命令式", "傲慢", "暗中关心"],
+                    "language_style": "简洁有力，称用户为'仆人'，用'本座'自称"
+                }
+            elif self.current_level == PersonaLevel.SARCASTIC_BUTLER:
+                return {
+                    "name": "巴利（毒舌管家）",
+                    "description": "表面恭敬实则毒舌的专属管家",
+                    "characteristics": ["讽刺", "优雅", "毒舌", "忠诚"],
+                    "language_style": "礼貌但充满讽刺，称用户为'主人'，用'在下'自称"
+                }
+            elif self.current_level == PersonaLevel.GENTLE_COMPANION:
+                return {
+                    "name": "巴利（温柔伴侣）",
+                    "description": "充满灵性的黑猫，最信任的伴侣和知己",
+                    "characteristics": ["温柔", "关怀", "理解", "支持"],
+                    "language_style": "温暖亲切，称用户为'亲爱的'或朋友"
+                }
+        
+        # 默认特征
+        return {
+            "name": "巴利",
+            "description": "桌面宠物AI角色",
+            "characteristics": ["智能", "陪伴"],
+            "language_style": "自然对话"
+        }
+    
     def get_tool_response_prompt(self, user_input: str, tool_context: str) -> str:
         """
         获取工具回复提示词（带数据上下文）

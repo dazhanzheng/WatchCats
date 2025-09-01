@@ -38,9 +38,18 @@ def main():
         # 启动时仅显示托盘图标
         if hasattr(pet, 'tray_icon') and pet.tray_icon:
             try:
+                # 使用动态生成的托盘消息
+                from baal.desktop_pet.core.persona_manager import PersonaManager
+                persona_level = PersonaManager.get_current_persona()
+                if persona_level == PersonaManager.PersonaLevel.STRICT_MASTER:
+                    tray_msg = "本座已在暗中监视。点击托盘图标召唤本座。"
+                elif persona_level == PersonaManager.PersonaLevel.SARCASTIC_BUTLER:
+                    tray_msg = "在下在暗处'守护'着主人。点击图标召唤在下。"
+                else:
+                    tray_msg = "我在这里陪着你。点击图标找我聊天。"
                 pet.tray_icon.showMessage(
                     "巴利监管者",
-                    "本座已在暗中监视。点击托盘图标召唤本座。",
+                    tray_msg,
                     pet.tray_icon.MessageIcon.Information,
                     3000
                 )

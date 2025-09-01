@@ -84,6 +84,11 @@ from ..core import ConfigManager, LLMHandler
 from ..core.persona_manager import PersonaLevel, PersonaManager
 from ..core.emotion_manager import EmotionManager
 from ..core.preset_responses import PresetResponseManager
+from ..core.dynamic_dialogue_generator import (
+    DynamicDialogueGenerator, 
+    DialogueContext,
+    get_dialogue_generator
+)
 from ..core.proactive_dialogue_manager import get_dialogue_manager, DialogueType
 from ..core.logger_config import get_logger, log_performance, log_ui_event
 from ..supervision_mode import SupervisionMode
@@ -220,6 +225,7 @@ class PetWindow(QWidget):
         
         # 人设管理器
         try:
+            from ..core.persona_manager import PersonaLevel
             # 从配置中获取人设级别
             config = self.config_manager.get_config()
             persona_level_value = config.get('persona_level', 1)  # 默认为严厉主人档
@@ -266,6 +272,9 @@ class PetWindow(QWidget):
             # 传入persona_manager以保持人设一致性
             self.supervision_mode = SupervisionMode(persona_manager=self.persona_manager)
             # 高级功能初始化
+            
+            # 初始化动态对话生成器
+            self.dialogue_generator = None  # 将在LLM初始化后设置
         except Exception as e:
             self.logger.error(f"Failed to initialize advanced features: {e}", exc_info=True)
             # Continue without advanced features
@@ -653,6 +662,9 @@ class PetWindow(QWidget):
                     persona_level=persona_level
                 )
                 
+                # 初始化动态对话生成器
+                self.dialogue_generator = get_dialogue_generator(self.llm_handler)
+                
                 # 设置字符延迟（如果配置中有）
                 config = self.config_manager.get_config()
                 if 'char_delays' in config:
@@ -693,11 +705,8 @@ class PetWindow(QWidget):
                 welcome_msg = self._get_return_greeting()
                 self.logger.info("User has conversation history, showing return greeting")
             else:
-                # 没有历史记录，显示新用户欢迎消息
-                welcome_msg = PresetResponseManager.get_response(
-                    self.persona_manager.current_level,
-                    "welcome"
-                )
+                # 没有历史记录，使用动态生成欢迎消息
+                welcome_msg = "<#5>..."
                 self.logger.info("New user, showing welcome message")
             
             # 从消息中提取表情并更新
@@ -710,12 +719,31 @@ class PetWindow(QWidget):
             welcome_msg = "契约未成立。设置你的密钥，否则本座可没兴趣理会你。"
             self.logger.info("API not configured, showing configuration prompt")
         
-        # 使用独立气泡显示消息
+        # 显示加载动画
+        self.chat_bubble.set_status("thinking")
         self.chat_bubble.show_message(welcome_msg)
         # 设置气泡位置（使用默认位置）
         self.chat_bubble.set_position_relative_to(self, use_offset=False)
         # 启动30秒自动隐藏计时器
-        self._start_bubble_auto_hide_timer(30000)  # 30秒后自动隐藏
+        self._start_bubble_auto_hide_timer(30000)
+        
+        # 定义回调函数
+        def on_welcome_generated(msg):
+            self.chat_bubble.set_status("normal")
+            if msg.startswith("<#"):
+                self._update_emotion(msg[:4])
+                msg = msg[4:].strip()
+            self.chat_bubble.show_message(msg)
+        
+        # 动态生成欢迎消息
+        if self.dialogue_generator:
+            self.dialogue_generator.generate(
+                context=DialogueContext.WELCOME,
+                persona=self.persona_manager.current_level,
+                callback=on_welcome_generated
+            )
+        else:
+            on_welcome_generated("<#5>我是巴利，你的监督者。")  # 30秒后自动隐藏
     
     def _get_return_greeting(self):
         """获取用户回归时的问候语"""
@@ -893,33 +921,49 @@ class PetWindow(QWidget):
                 # 使用互动状态对应的招呼语
                 greeting_type = greeting_map.get(interaction_state, "double_click_greeting")
             
-            # 尝试获取对应类型的招呼语，如果没有则使用默认
-            try:
-                greeting = PresetResponseManager.get_response(
-                    self.persona_manager.current_level,
-                    greeting_type
-                )
-            except:
-                # 如果特定类型不存在，使用默认招呼语
-                greeting = PresetResponseManager.get_response(
-                    self.persona_manager.current_level,
-                    "double_click_greeting"
-                )
+            # 确定对话场景
+            if greeting_type == "morning_greeting":
+                dialogue_context = DialogueContext.MORNING_GREETING
+            elif greeting_type == "late_night_care":
+                dialogue_context = DialogueContext.LATE_NIGHT
+            elif greeting_type == "long_time_no_see":
+                dialogue_context = DialogueContext.LONG_TIME_NO_SEE
+            elif greeting_type == "frequent_interaction":
+                dialogue_context = DialogueContext.FREQUENT_INTERACTION
+            else:
+                dialogue_context = DialogueContext.DOUBLE_CLICK
             
-            if greeting.startswith("<#"):
-                self._update_emotion(greeting[:4])
-                greeting = greeting[4:].strip()
-            
-            # 显示聊天窗口和招呼语
+            # 显示聊天窗口
             if not self.chat_bubble.isVisible():
                 self.chat_bubble.show()
                 self.chat_bubble.raise_()
                 self.chat_bubble.set_position_relative_to(self, use_offset=True)
                 self._start_bubble_auto_hide_timer()
             
-            self.chat_bubble.show_message(greeting)
-            self.chat_bubble.input_field.setFocus()
-            self.logger.info(f"Chat bubble shown with {greeting_type}")
+            # 显示加载动画
+            self.chat_bubble.set_status("thinking")
+            self.chat_bubble.show_message("<#5>...")
+            
+            # 定义回调函数
+            def on_greeting_generated(greeting):
+                self.chat_bubble.set_status("normal")
+                if greeting.startswith("<#"):
+                    self._update_emotion(greeting[:4])
+                    greeting = greeting[4:].strip()
+                self.chat_bubble.show_message(greeting)
+                self.chat_bubble.input_field.setFocus()
+                self.logger.info(f"Dynamic greeting generated for {greeting_type}")
+            
+            # 使用动态对话生成器
+            if self.dialogue_generator:
+                self.dialogue_generator.generate(
+                    context=dialogue_context,
+                    persona=self.persona_manager.current_level,
+                    callback=on_greeting_generated
+                )
+            else:
+                # 后备方案
+                on_greeting_generated("<#5>什么事，仆人？")
     
     @log_ui_event("show_chat_bubble")
     def _show_chat_bubble(self, toggle=False):
@@ -965,16 +1009,29 @@ class PetWindow(QWidget):
         # 检查是否已配置
         if not self.config_manager.is_configured():
             self.logger.warning("Message sent but LLM not configured")
-            response = PresetResponseManager.get_response(
-                self.persona_manager.current_level,
-                "api_not_configured"
-            )
-            if response.startswith("<#"):
-                self._update_emotion(response[:4])
-                response = response[4:].strip()
-            self.chat_bubble.show_message(response)
-            # 重置自动隐藏计时器（预设消息也需要自动隐藏）
-            self._reset_bubble_auto_hide_timer()
+            # 显示加载动画
+            self.chat_bubble.set_status("thinking")
+            self.chat_bubble.show_message("<#5>...")
+            
+            # 定义回调
+            def on_api_warning_generated(response):
+                self.chat_bubble.set_status("normal")
+                if response.startswith("<#"):
+                    self._update_emotion(response[:4])
+                    response = response[4:].strip()
+                self.chat_bubble.show_message(response)
+                # 重置自动隐藏计时器
+                self._reset_bubble_auto_hide_timer()
+            
+            # 生成动态回应
+            if self.dialogue_generator:
+                self.dialogue_generator.generate(
+                    context=DialogueContext.API_NOT_CONFIGURED,
+                    persona=self.persona_manager.current_level,
+                    callback=on_api_warning_generated
+                )
+            else:
+                on_api_warning_generated("<#6>先去设置密钥，仆人。")
             return
         
         # 延迟显示AI回复（让用户消息先显示）
@@ -1130,6 +1187,10 @@ class PetWindow(QWidget):
                 if self.llm_handler:
                     self.llm_handler.set_persona_level(persona_level)
                 
+                # 更新动态对话生成器
+                if not self.dialogue_generator:
+                    self.dialogue_generator = get_dialogue_generator(self.llm_handler)
+                
                 # 更新监督模式的人设管理器引用
                 if hasattr(self, 'supervision_mode') and self.supervision_mode:
                     self.supervision_mode.persona_manager = self.persona_manager
@@ -1153,16 +1214,28 @@ class PetWindow(QWidget):
             
             # 如果人设改变且API已配置，显示对应的反应
             if new_persona_level != old_persona_level and self.config_manager.is_configured():
-                response = PresetResponseManager.get_response(
-                    self.persona_manager.current_level,
-                    "api_configured"
-                )
-                if response.startswith("<#"):
-                    self._update_emotion(response[:4])
-                    response = response[4:].strip()
-                self.chat_bubble.show_message(response)
-                # 启动30秒自动隐藏计时器（人设切换提示）
-                self._start_bubble_auto_hide_timer(30000)
+                # 显示加载动画
+                self.chat_bubble.set_status("thinking")
+                self.chat_bubble.show_message("<#5>...")
+                
+                def on_persona_msg_generated(response):
+                    self.chat_bubble.set_status("normal")
+                    if response.startswith("<#"):
+                        self._update_emotion(response[:4])
+                        response = response[4:].strip()
+                    self.chat_bubble.show_message(response)
+                    # 启动30秒自动隐藏计时器
+                    self._start_bubble_auto_hide_timer(30000)
+                
+                # 动态生成
+                if self.dialogue_generator:
+                    self.dialogue_generator.generate(
+                        context=DialogueContext.API_CONFIGURED,
+                        persona=self.persona_manager.current_level,
+                        callback=on_persona_msg_generated
+                    )
+                else:
+                    on_persona_msg_generated("<#5>契约成立。")
     
     def _toggle_visibility(self):
         """切换窗口可见性"""
@@ -1217,16 +1290,28 @@ class PetWindow(QWidget):
         
         # 显示提示
         if hasattr(self, 'chat_bubble'):
-            response = PresetResponseManager.get_response(
-                self.persona_manager.current_level,
-                "position_reset"
-            )
-            if response.startswith("<#"):
-                self._update_emotion(response[:4])
-                response = response[4:].strip()
-            self.chat_bubble.show_message(response)
-            # 启动30秒自动隐藏计时器（位置重置提示）
-            self._start_bubble_auto_hide_timer(30000)
+            # 显示加载动画
+            self.chat_bubble.set_status("thinking")
+            self.chat_bubble.show_message("<#5>...")
+            
+            def on_reset_msg_generated(response):
+                self.chat_bubble.set_status("normal")
+                if response.startswith("<#"):
+                    self._update_emotion(response[:4])
+                    response = response[4:].strip()
+                self.chat_bubble.show_message(response)
+                # 启动30秒自动隐藏计时器
+                self._start_bubble_auto_hide_timer(30000)
+            
+            # 动态生成
+            if self.dialogue_generator:
+                self.dialogue_generator.generate(
+                    context=DialogueContext.POSITION_RESET,
+                    persona=self.persona_manager.current_level,
+                    callback=on_reset_msg_generated
+                )
+            else:
+                on_reset_msg_generated("<#5>位置重置完成。")
     
     
     def _toggle_start_minimized(self, checked):
@@ -1256,28 +1341,30 @@ class PetWindow(QWidget):
         
         # 显示提示
         if hasattr(self, 'chat_bubble'):
-            if checked:
-                response = PresetResponseManager.get_response(
-                    self.persona_manager.current_level,
-                    "always_on_top_enable"
-                )
+            # 显示加载动画
+            self.chat_bubble.set_status("thinking")
+            self.chat_bubble.show_message("<#5>...")
+            
+            def on_top_msg_generated(response):
+                self.chat_bubble.set_status("normal")
                 if response.startswith("<#"):
                     self._update_emotion(response[:4])
                     response = response[4:].strip()
                 self.chat_bubble.show_message(response)
-                # 启动30秒自动隐藏计时器（置顶启用提示）
+                # 启动30秒自动隐藏计时器
                 self._start_bubble_auto_hide_timer(30000)
+            
+            # 动态生成
+            context = DialogueContext.ALWAYS_ON_TOP_ENABLE if checked else DialogueContext.ALWAYS_ON_TOP_DISABLE
+            if self.dialogue_generator:
+                self.dialogue_generator.generate(
+                    context=context,
+                    persona=self.persona_manager.current_level,
+                    callback=on_top_msg_generated
+                )
             else:
-                response = PresetResponseManager.get_response(
-                    self.persona_manager.current_level,
-                    "always_on_top_disable"
-                )
-                if response.startswith("<#"):
-                    self._update_emotion(response[:4])
-                    response = response[4:].strip()
-                self.chat_bubble.show_message(response)
-                # 启动30秒自动隐藏计时器（置顶禁用提示）
-                self._start_bubble_auto_hide_timer(30000)
+                fallback = "<#5>置顶启用。" if checked else "<#5>置顶取消。"
+                on_top_msg_generated(fallback)
     
     def _update_window_flags(self):
         """更新窗口标志（主要用于切换置顶状态）"""
@@ -1462,15 +1549,41 @@ class PetWindow(QWidget):
                 success = self.llm_handler.clear_conversation_history()
                 
                 if success:
-                    # 显示成功消息
-                    self.chat_bubble.show_message("<#3>记忆已清除。我们重新开始。")
+                    # 使用动态生成的消息
+                    if self.llm_handler:
+                        # 使用LLM生成清理记忆成功的反馈
+                        response = self.llm_handler.generate_dynamic_response(
+                            context="memory_cleared",
+                            mood=3,
+                            parameters={"action": "记忆已清除"}
+                        )
+                        self.chat_bubble.show_message(response)
+                    else:
+                        self.chat_bubble.show_message("<#3>记忆已清除。我们重新开始。")
                     self.logger.info("Conversation history cleared successfully")
                 else:
-                    # 显示失败消息
-                    self.chat_bubble.show_message("<#4>清除记忆失败。稍后再试。")
+                    # 使用动态生成的失败消息
+                    if self.llm_handler:
+                        response = self.llm_handler.generate_dynamic_response(
+                            context="memory_clear_failed",
+                            mood=4,
+                            parameters={"error": "清除记忆失败"}
+                        )
+                        self.chat_bubble.show_message(response)
+                    else:
+                        self.chat_bubble.show_message("<#4>清除记忆失败。稍后再试。")
                     self.logger.warning("Failed to clear conversation history")
             else:
-                self.chat_bubble.show_message("<#4>没有记忆需要清除。")
+                # 使用动态生成的消息
+                if self.llm_handler:
+                    response = self.llm_handler.generate_dynamic_response(
+                        context="no_memory_to_clear",
+                        mood=4,
+                        parameters={"status": "没有记忆"}
+                    )
+                    self.chat_bubble.show_message(response)
+                else:
+                    self.chat_bubble.show_message("<#4>没有记忆需要清除。")
         else:
             self.logger.info("User cancelled memory clear")
     
@@ -1496,18 +1609,36 @@ class PetWindow(QWidget):
         if hasattr(self, 'tray_icon') and QSystemTrayIcon.isSystemTrayAvailable():
             # Windows和Mac的消息显示方式略有不同
             if sys.platform == "win32":
+                # 使用动态生成的托盘消息
+                from ..core.persona_manager import PersonaManager
+                persona_level = PersonaManager.get_current_persona()
+                if persona_level == PersonaManager.PersonaLevel.STRICT_MASTER:
+                    tray_msg = "本座在暗处盯着你。"
+                elif persona_level == PersonaManager.PersonaLevel.SARCASTIC_BUTLER:
+                    tray_msg = "在下在暗处'关注'你。"
+                else:
+                    tray_msg = "我在这里陪着你。"
                 self.tray_icon.showMessage(
                     "巴利监管者",
-                    "本座在暗处盯着你。",
+                    tray_msg,
                     QSystemTrayIcon.MessageIcon.Information,
                     2000
                 )
             else:
                 # macOS可能需要通知权限
                 try:
+                    # 使用动态生成的托盘消息
+                    from ..core.persona_manager import PersonaManager
+                    persona_level = PersonaManager.get_current_persona()
+                    if persona_level == PersonaManager.PersonaLevel.STRICT_MASTER:
+                        tray_msg = "本座在暗处盯着你。"
+                    elif persona_level == PersonaManager.PersonaLevel.SARCASTIC_BUTLER:
+                        tray_msg = "在下在暗处'关注'你。"
+                    else:
+                        tray_msg = "我在这里陪着你。"
                     self.tray_icon.showMessage(
                         "巴利监管者",
-                        "本座在暗处盯着你。",
+                        tray_msg,
                         QSystemTrayIcon.MessageIcon.Information,
                         2000
                     )
@@ -1630,7 +1761,16 @@ class PetWindow(QWidget):
         if self.supervision_mode.is_active:
             # 直接关闭监督模式
             self.supervision_mode.stop_supervision()
-            self.chat_bubble.show_message("监督模式已关闭。")
+            # 使用动态生成的消息
+            if self.llm_handler:
+                response = self.llm_handler.generate_dynamic_response(
+                    context="supervision_stopped",
+                    mood=3,
+                    parameters={"status": "监督模式已关闭"}
+                )
+                self.chat_bubble.show_message(response)
+            else:
+                self.chat_bubble.show_message("监督模式已关闭。")
             # 启动30秒自动隐藏计时器（监督关闭提示）
             self._start_bubble_auto_hide_timer(30000)
             self._update_supervision_button_style()
@@ -1729,7 +1869,16 @@ class PetWindow(QWidget):
         # 如果监督模式已经在运行，只更新目标
         if self.supervision_mode.is_active:
             self.supervision_mode.update_goals(long_term_goal, short_term_goals)
-            self.chat_bubble.show_message("监督目标已更新！")
+            # 使用动态生成的消息
+            if self.llm_handler:
+                response = self.llm_handler.generate_dynamic_response(
+                    context="goals_updated",
+                    mood=2,
+                    parameters={"action": "监督目标已更新"}
+                )
+                self.chat_bubble.show_message(response)
+            else:
+                self.chat_bubble.show_message("监督目标已更新！")
             # 启动30秒自动隐藏计时器
             self._start_bubble_auto_hide_timer(30000)
             return
@@ -1750,7 +1899,16 @@ class PetWindow(QWidget):
             self._update_supervision_button_style()
         else:
             # 监督模式启动失败，提示用户配置API
-            self.chat_bubble.show_message("监督模式需要配置API密钥。即将打开设置...")
+            # 使用动态生成的消息
+            if self.llm_handler:
+                response = self.llm_handler.generate_dynamic_response(
+                    context="api_required_for_supervision",
+                    mood=5,
+                    parameters={"requirement": "API密钥"}
+                )
+                self.chat_bubble.show_message(response)
+            else:
+                self.chat_bubble.show_message("监督模式需要配置API密钥。即将打开设置...")
             # 启动30秒自动隐藏计时器（API配置提示）
             self._start_bubble_auto_hide_timer(30000)
             # 延迟一下让用户看到消息
@@ -1786,12 +1944,30 @@ class PetWindow(QWidget):
                     # 启动30秒自动隐藏计时器（监督启动提示）
                     self._start_bubble_auto_hide_timer(30000)
                 else:
-                    self.chat_bubble.show_message("API配置可能有误，请检查设置。")
+                    # 使用动态生成的错误消息
+                    if self.llm_handler:
+                        response = self.llm_handler.generate_dynamic_response(
+                            context="api_config_error",
+                            mood=6,
+                            parameters={"error": "API配置错误"}
+                        )
+                        self.chat_bubble.show_message(response)
+                    else:
+                        self.chat_bubble.show_message("API配置可能有误，请检查设置。")
                     # 启动30秒自动隐藏计时器（错误提示）
                     self._start_bubble_auto_hide_timer(30000)
         else:
             # 用户取消了设置
-            self.chat_bubble.show_message("已取消监督模式。")
+            # 使用动态生成的消息
+            if self.llm_handler:
+                response = self.llm_handler.generate_dynamic_response(
+                    context="supervision_cancelled",
+                    mood=3,
+                    parameters={"action": "取消监督"}
+                )
+                self.chat_bubble.show_message(response)
+            else:
+                self.chat_bubble.show_message("已取消监督模式。")
             # 启动30秒自动隐藏计时器（取消提示）
             self._start_bubble_auto_hide_timer(30000)
             # 清除待处理的任务
